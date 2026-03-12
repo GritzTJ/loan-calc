@@ -1,0 +1,26 @@
+#####################
+#     loan-calc     #
+#####################
+services:
+  loan-calc:
+    build: .
+    container_name: loan-calc
+    restart: unless-stopped
+    networks:
+      - net_loan-calc
+    environment:
+      - "TZ=Europe/Paris"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=net_loan-calc"
+      - "traefik.http.routers.loan-calc.rule=Host(`loan-calc.domaine.fr`)"
+      - "traefik.http.routers.loan-calc.entrypoints=websecure"
+      - "traefik.http.routers.loan-calc.tls=true"
+      - "traefik.http.routers.loan-calc.tls.options=tls13only@file"
+      - "traefik.http.routers.loan-calc.tls.certresolver=ovhresolver"
+      - "traefik.http.routers.loan-calc.middlewares=chain-secure@file"
+      - "traefik.http.services.loan-calc.loadbalancer.server.port=8080"
+
+networks:
+  net_loan-calc:
+    driver: bridge
