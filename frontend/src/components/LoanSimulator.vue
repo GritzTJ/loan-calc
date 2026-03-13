@@ -1,48 +1,35 @@
 <template>
   <div>
-    <h2 class="text-xl font-bold text-gray-800 mb-4">Simulateur de prêt</h2>
+    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Simulateur de prêt</h2>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <!-- Montant emprunté -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Montant emprunté (€)</label>
-        <input
-          v-model.number="principal"
-          type="number"
-          min="0"
-          step="1000"
-          class="input-field"
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Montant emprunté (€)</label>
+        <NumberInput
+          v-model="principal"
           placeholder="200 000"
         />
       </div>
 
       <!-- Taux annuel -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Taux annuel (%)</label>
-        <input
-          v-model.number="annualRate"
-          type="number"
-          min="0"
-          max="20"
-          step="0.01"
-          class="input-field"
-          placeholder="3.50"
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Taux annuel (%)</label>
+        <NumberInput
+          v-model="annualRate"
+          :decimals="2"
+          placeholder="3,50"
         />
       </div>
 
       <!-- Nombre de mensualités -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de mensualités</label>
-        <input
-          v-model.number="months"
-          type="number"
-          min="1"
-          max="600"
-          step="1"
-          class="input-field"
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de mensualités</label>
+        <NumberInput
+          v-model="months"
           placeholder="240"
         />
-        <p v-if="months" class="text-xs text-gray-400 mt-1">
+        <p v-if="months" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
           = {{ Math.floor(months / 12) }} an{{ Math.floor(months / 12) > 1 ? 's' : '' }}
           <span v-if="months % 12"> et {{ months % 12 }} mois</span>
         </p>
@@ -50,22 +37,22 @@
 
       <!-- Date de début -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date de début</label>
         <input
           v-model="startDateStr"
           type="date"
           class="input-field"
         />
-        <p class="text-xs text-gray-400 mt-1">
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
           1re mensualité le {{ firstPaymentLabel }}
         </p>
       </div>
     </div>
 
     <!-- Résultat mensualité -->
-    <div v-if="isValid" class="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-5 text-center">
-      <div class="text-sm text-gray-500 uppercase tracking-wide">Mensualité</div>
-      <div class="text-3xl font-bold text-blue-700 mt-1">
+    <div v-if="isValid" class="mt-6 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-5 text-center transition-colors">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Mensualité</div>
+      <div class="text-3xl font-bold text-blue-700 dark:text-blue-400 mt-1">
         {{ formatCurrency(monthlyPayment) }}
       </div>
     </div>
@@ -85,6 +72,7 @@ import {
   formatDate
 } from '../services/loanCalculator.js'
 import AmortizationTable from './AmortizationTable.vue'
+import NumberInput from './NumberInput.vue'
 
 // --- State ---
 const principal = ref(200000)
