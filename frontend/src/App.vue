@@ -59,7 +59,7 @@
 
     <!-- Footer -->
     <footer class="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
-      Simulateur de prêt immobilier — v1.1 — Usage personnel
+      Simulateur de prêt immobilier — v1.2 — Usage personnel
       <!-- TODO v2: lien vers l'historique des simulations sauvegardées -->
     </footer>
   </div>

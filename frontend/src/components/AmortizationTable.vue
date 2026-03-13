@@ -1,6 +1,21 @@
 <template>
   <div v-if="rows.length" class="mt-6">
-    <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Tableau d'amortissement</h3>
+    <!-- Header avec titre et bouton export -->
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Tableau d'amortissement</h3>
+      <button
+        @click="onExport"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
+               text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30
+               border border-green-200 dark:border-green-800 rounded-lg
+               hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Exporter Excel
+      </button>
+    </div>
 
     <!-- Résumé -->
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
@@ -17,6 +32,9 @@
         <div class="text-lg font-bold text-purple-700 dark:text-purple-400">{{ durationLabel }}</div>
       </div>
     </div>
+
+    <!-- Graphique -->
+    <AmortizationChart :rows="rows" />
 
     <!-- Tableau -->
     <div class="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -56,6 +74,8 @@
 <script setup>
 import { computed } from 'vue'
 import { formatCurrency, formatDate } from '../services/loanCalculator.js'
+import { exportAmortizationToXlsx } from '../services/excelExport.js'
+import AmortizationChart from './AmortizationChart.vue'
 
 const props = defineProps({
   rows: {
@@ -80,4 +100,8 @@ const durationLabel = computed(() => {
   if (rem === 0) return `${years} an${years > 1 ? 's' : ''}`
   return `${years} an${years > 1 ? 's' : ''} et ${rem} mois`
 })
+
+function onExport() {
+  exportAmortizationToXlsx(props.rows)
+}
 </script>
