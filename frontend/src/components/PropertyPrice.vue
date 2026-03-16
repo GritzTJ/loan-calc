@@ -39,7 +39,8 @@
         </div>
         <NumberInput
           v-model="agencyFees"
-          :placeholder="agencyFeesMode === '%' ? '0' : '0'"
+          :decimals="2"
+          placeholder="0"
         />
       </div>
 

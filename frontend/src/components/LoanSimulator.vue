@@ -50,17 +50,21 @@
       </div>
 
       <!-- Taux assurance (optionnel) -->
-      <div class="sm:col-span-2">
+      <div>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Taux assurance (%/an)
           <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
         </label>
-        <NumberInput
-          v-model="insuranceRate"
-          :decimals="2"
-          input-class="input-field sm:w-1/2"
-          placeholder="0,30"
-        />
+        <NumberInput v-model="insuranceRate" :decimals="2" placeholder="0,30" />
+      </div>
+
+      <!-- Frais de dossier (optionnel) -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Frais de dossier (€)
+          <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
+        </label>
+        <NumberInput v-model="applicationFees" placeholder="0" />
       </div>
     </div>
 
@@ -106,6 +110,7 @@
       v-if="isValid"
       :rows="amortizationTable"
       :monthly-insurance="monthlyInsurance"
+      :application-fees="applicationFees || 0"
     />
 
     <!-- Modal de sauvegarde -->
@@ -161,6 +166,7 @@ const principal = ref(200000)
 const annualRate = ref(3.5)
 const months = ref(240)
 const insuranceRate = ref(null)
+const applicationFees = ref(null)
 
 // Date de début : par défaut = 1er du mois prochain
 const defaultDate = getDefaultStartDate()

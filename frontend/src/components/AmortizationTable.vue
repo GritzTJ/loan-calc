@@ -30,14 +30,16 @@
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Coût assurance</div>
         <div class="text-lg font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(totalInsurance) }}</div>
       </div>
+      <!-- Frais de dossier (si applicable) -->
+      <div v-if="applicationFees > 0" class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center transition-colors">
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais de dossier</div>
+        <div class="text-lg font-bold text-gray-700 dark:text-gray-300">{{ formatCurrency(applicationFees) }}</div>
+      </div>
       <div class="bg-green-50 dark:bg-green-900/30 rounded-lg p-3 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Total remboursé</div>
-        <div class="text-lg font-bold text-green-700 dark:text-green-400">{{ formatCurrency(totalPaid + totalInsurance) }}</div>
+        <div class="text-lg font-bold text-green-700 dark:text-green-400">{{ formatCurrency(totalPaid + totalInsurance + applicationFees) }}</div>
       </div>
-      <div
-        class="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center transition-colors"
-        :class="monthlyInsurance > 0 ? 'sm:col-span-1 col-span-2' : 'sm:col-span-1 col-span-2'"
-      >
+      <div class="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center transition-colors col-span-2 sm:col-span-1">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Durée</div>
         <div class="text-lg font-bold text-purple-700 dark:text-purple-400">{{ durationLabel }}</div>
       </div>
@@ -89,7 +91,8 @@ import AmortizationChart from './AmortizationChart.vue'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
-  monthlyInsurance: { type: Number, default: 0 }
+  monthlyInsurance: { type: Number, default: 0 },
+  applicationFees: { type: Number, default: 0 }
 })
 
 const totalInterest = computed(() =>

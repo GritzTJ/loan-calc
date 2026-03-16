@@ -49,7 +49,16 @@
             >% du prix</button>
           </div>
         </div>
-        <NumberInput v-model="agencyFees" placeholder="0" />
+        <NumberInput v-model="agencyFees" :decimals="2" placeholder="0" />
+      </div>
+
+      <!-- Frais de dossier -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Frais de dossier (€)
+          <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
+        </label>
+        <NumberInput v-model="applicationFees" placeholder="0" />
       </div>
 
       <!-- Type de bien -->
@@ -128,10 +137,13 @@
           Coût total acquisition
           <InfoTooltip
             principe="Somme de tous les postes de dépense"
-            calcul="Prix net vendeur + frais de notaire + frais d'agence"
+            calcul="Prix net vendeur + notaire + agence + frais de dossier"
           />
         </div>
         <div class="text-xl font-bold text-blue-700 dark:text-blue-400 mt-1">{{ formatCurrency(result.totalCost) }}</div>
+        <div v-if="result.applicationFees > 0" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          dont {{ formatCurrency(result.applicationFees) }} de frais de dossier
+        </div>
       </div>
     </div>
   </div>
@@ -148,6 +160,7 @@ const personalContribution = ref(null)
 const agencyFees = ref(null)
 const agencyFeesMode = ref('€')
 const propertyType = ref('ancien')
+const applicationFees = ref(null)
 
 const isValid = computed(() => (propertyPrice.value || 0) > 0)
 
@@ -157,7 +170,8 @@ const result = computed(() =>
     propertyType.value,
     agencyFees.value || 0,
     agencyFeesMode.value,
-    personalContribution.value || 0
+    personalContribution.value || 0,
+    applicationFees.value || 0
   )
 )
 </script>
