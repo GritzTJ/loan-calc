@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 .DS_Store
+# Données SQLite (générées au runtime)
+backend/data/
+*.db
+*.db-shm
+*.db-wal
