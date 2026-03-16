@@ -77,8 +77,13 @@
       </div>
     </div>
 
+    <!-- Avertissement apport insuffisant pour couvrir les frais -->
+    <div v-if="isValid && result.fundingGap > 0" class="mt-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+      Apport insuffisant : il manque <strong>{{ formatCurrency(result.fundingGap) }}</strong> pour couvrir les frais d'acquisition. Les frais de notaire et d'agence ne peuvent pas être financés par le crédit.
+    </div>
+
     <!-- Résultats -->
-    <div v-if="isValid" class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
+    <div v-if="isValid" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
       <!-- Montant à emprunter (mis en avant) -->
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Montant à emprunter</div>
