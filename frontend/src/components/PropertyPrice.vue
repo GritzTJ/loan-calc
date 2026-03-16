@@ -78,20 +78,45 @@
     <!-- Résultats (masqués si le prix est 0 — apport trop faible pour tout financement) -->
     <div v-if="borrowingCapacity > 0 && result.maxPrice > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Prix max du bien</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
+          Prix max du bien
+          <InfoTooltip
+            principe="Minimum des contraintes budget et apport"
+            calcul="C1 = (crédit+apport−agence) / (1+notaire) ; C2 = apport / notaire"
+          />
+        </div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
       </div>
       <div class="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais de notaire</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
+          Frais de notaire
+          <InfoTooltip
+            principe="Frais d'acquisition non finançables par le crédit"
+            calcul="Prix max × 8% (ancien) ou × 3% (neuf)"
+          />
+        </div>
         <div class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(result.notaryFees) }}</div>
       </div>
       <!-- Frais d'agence (affiché uniquement si renseigné) -->
       <div v-if="result.agencyFees > 0" class="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais d'agence</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
+          Frais d'agence
+          <InfoTooltip
+            v-if="agencyFeesMode === '%'"
+            principe="Commission d'agence calculée sur le prix du bien"
+            calcul="Prix max × taux agence"
+          />
+        </div>
         <div class="text-xl font-bold text-purple-700 dark:text-purple-400">{{ formatCurrency(result.agencyFees) }}</div>
       </div>
       <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Budget total</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
+          Budget total
+          <InfoTooltip
+            principe="Enveloppe totale disponible pour l'achat"
+            calcul="Capital empruntable + apport personnel"
+          />
+        </div>
         <div class="text-xl font-bold text-blue-700 dark:text-blue-400">{{ formatCurrency(result.totalBudget) }}</div>
       </div>
     </div>
@@ -102,6 +127,7 @@
 import { ref, computed } from 'vue'
 import { calculateMaxPropertyPrice, formatCurrency } from '../services/loanCalculator.js'
 import NumberInput from './NumberInput.vue'
+import InfoTooltip from './InfoTooltip.vue'
 
 const props = defineProps({
   borrowingCapacity: {

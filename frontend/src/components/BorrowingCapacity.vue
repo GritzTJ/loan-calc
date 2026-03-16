@@ -99,8 +99,13 @@
     <!-- Résultats -->
     <div v-if="isValid" class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-5 text-center transition-colors">
-        <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+        <div class="flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
           Mensualité {{ monthlyInsurance > 0 ? 'crédit max' : 'maximale' }}
+          <InfoTooltip
+            v-if="inputMode === 'income'"
+            principe="Plafond d'endettement appliqué aux revenus"
+            calcul="(Revenus × taux d'endettement) − charges"
+          />
         </div>
         <div class="text-2xl font-bold text-blue-700 dark:text-blue-400 mt-1">
           {{ formatCurrency(maxPayment) }}
@@ -110,7 +115,13 @@
         </div>
       </div>
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl p-5 text-center transition-colors">
-        <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Capital empruntable</div>
+        <div class="flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Capital empruntable
+          <InfoTooltip
+            principe="Formule inverse d'amortissement à taux fixe"
+            calcul="Mensualité × (1 − (1+t)⁻ⁿ) / t, t = taux / 12"
+          />
+        </div>
         <div class="text-2xl font-bold text-green-700 dark:text-green-400 mt-1">
           {{ formatCurrency(capacity) }}
         </div>
@@ -169,6 +180,7 @@ import {
 import { saveSimulation } from '../services/storageService.js'
 import PropertyPrice from './PropertyPrice.vue'
 import NumberInput from './NumberInput.vue'
+import InfoTooltip from './InfoTooltip.vue'
 
 // --- State ---
 const inputMode = ref('income') // 'income' | 'payment'

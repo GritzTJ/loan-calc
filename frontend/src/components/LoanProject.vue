@@ -6,10 +6,11 @@
     </p>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <!-- Prix du bien -->
+      <!-- Prix net vendeur -->
       <div class="sm:col-span-2">
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Prix du bien (€)
+          Prix net vendeur (€)
+          <span class="font-normal text-gray-400 dark:text-gray-500">(hors frais d'agence)</span>
         </label>
         <NumberInput v-model="propertyPrice" placeholder="300 000" />
       </div>
@@ -79,32 +80,57 @@
 
     <!-- Avertissement apport insuffisant pour couvrir les frais -->
     <div v-if="isValid && result.fundingGap > 0" class="mt-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-sm text-amber-800 dark:text-amber-300">
-      Apport insuffisant : il manque <strong>{{ formatCurrency(result.fundingGap) }}</strong> pour couvrir les frais d'acquisition. Les frais de notaire et d'agence ne peuvent pas être financés par le crédit.
+      Apport insuffisant : il manque <strong>{{ formatCurrency(result.fundingGap) }}</strong> pour couvrir les frais de notaire. Les frais de notaire ne peuvent pas être financés par le crédit (les frais d'agence, eux, peuvent l'être).
     </div>
 
     <!-- Résultats -->
     <div v-if="isValid" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
       <!-- Montant à emprunter (mis en avant) -->
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Montant à emprunter</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Montant à emprunter
+          <InfoTooltip
+            principe="Coût total moins apport, plafonné au prix FAI"
+            calcul="min(prix net vendeur + agence, coût total − apport)"
+          />
+        </div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400 mt-1">{{ formatCurrency(result.loanAmount) }}</div>
       </div>
 
       <!-- Frais de notaire -->
       <div class="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Frais de notaire</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Frais de notaire
+          <InfoTooltip
+            principe="Frais d'acquisition non finançables par le crédit"
+            calcul="Prix net vendeur × 8% (ancien) ou × 3% (neuf)"
+          />
+        </div>
         <div class="text-xl font-bold text-orange-600 dark:text-orange-400 mt-1">{{ formatCurrency(result.notaryFees) }}</div>
       </div>
 
       <!-- Frais d'agence (uniquement si > 0) -->
       <div v-if="result.agencyFees > 0" class="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Frais d'agence</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Frais d'agence
+          <InfoTooltip
+            v-if="agencyFeesMode === '%'"
+            principe="Commission d'agence calculée sur le prix du bien"
+            calcul="Prix net vendeur × taux agence"
+          />
+        </div>
         <div class="text-xl font-bold text-purple-700 dark:text-purple-400 mt-1">{{ formatCurrency(result.agencyFees) }}</div>
       </div>
 
       <!-- Coût total -->
       <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Coût total acquisition</div>
+        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Coût total acquisition
+          <InfoTooltip
+            principe="Somme de tous les postes de dépense"
+            calcul="Prix net vendeur + frais de notaire + frais d'agence"
+          />
+        </div>
         <div class="text-xl font-bold text-blue-700 dark:text-blue-400 mt-1">{{ formatCurrency(result.totalCost) }}</div>
       </div>
     </div>
@@ -115,6 +141,7 @@
 import { ref, computed } from 'vue'
 import { calculateLoanAmount, formatCurrency } from '../services/loanCalculator.js'
 import NumberInput from './NumberInput.vue'
+import InfoTooltip from './InfoTooltip.vue'
 
 const propertyPrice = ref(null)
 const personalContribution = ref(null)

@@ -67,18 +67,36 @@
     <!-- Résultat mensualité -->
     <div v-if="isValid" class="mt-6 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-5 transition-colors">
       <div class="text-center">
-        <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Mensualité crédit</div>
+        <div class="flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Mensualité crédit
+          <InfoTooltip
+            principe="Amortissement à taux fixe sur la durée"
+            calcul="Capital × (t / (1 − (1+t)⁻ⁿ)), t = taux annuel / 12"
+          />
+        </div>
         <div class="text-3xl font-bold text-blue-700 dark:text-blue-400 mt-1">
           {{ formatCurrency(monthlyPayment) }}
         </div>
       </div>
       <!-- Assurance -->
       <div v-if="monthlyInsurance > 0" class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700 flex justify-between text-sm">
-        <span class="text-gray-500 dark:text-gray-400">+ Assurance / mois</span>
+        <span class="text-gray-500 dark:text-gray-400 inline-flex items-center">
+          + Assurance / mois
+          <InfoTooltip
+            principe="Cotisation assurance emprunteur mensuelle"
+            calcul="Capital × taux assurance annuel / 12"
+          />
+        </span>
         <span class="font-semibold text-gray-700 dark:text-gray-300">{{ formatCurrency(monthlyInsurance) }}</span>
       </div>
       <div v-if="monthlyInsurance > 0" class="mt-2 flex justify-between text-sm font-bold">
-        <span class="text-gray-700 dark:text-gray-200">= Mensualité totale</span>
+        <span class="text-gray-700 dark:text-gray-200 inline-flex items-center">
+          = Mensualité totale
+          <InfoTooltip
+            principe="Charge mensuelle totale due à la banque"
+            calcul="Mensualité crédit + assurance mensuelle"
+          />
+        </span>
         <span class="text-blue-700 dark:text-blue-400">{{ formatCurrency(monthlyPayment + monthlyInsurance) }}</span>
       </div>
     </div>
@@ -136,6 +154,7 @@ import {
 import { saveSimulation } from '../services/storageService.js'
 import AmortizationTable from './AmortizationTable.vue'
 import NumberInput from './NumberInput.vue'
+import InfoTooltip from './InfoTooltip.vue'
 
 // --- State ---
 const principal = ref(200000)
