@@ -109,21 +109,65 @@ export const NOTARY_FEES = {
 /**
  * Calcule le prix maximal du bien accessible.
  * Les frais d'agence ne peuvent pas être financés par le crédit — ils viennent en déduction de l'apport.
- * Prix max = (capital empruntable + apport - frais d'agence) / (1 + taux_frais_notaire)
- * @param {number} borrowingCapacity - Capital empruntable (€)
+ *
+ * Mode € :  prix = (disponible - fraisAgence€) / (1 + tauxNotaire)
+ * Mode % :  calcul circulaire résolu analytiquement :
+ *           prix × (1 + tauxNotaire + tauxAgence) = disponible
+ *           → prix = disponible / (1 + tauxNotaire + tauxAgence)
+ *
+ * @param {number} borrowingCapacity  - Capital empruntable (€)
  * @param {number} personalContribution - Apport personnel (€)
  * @param {'ancien'|'neuf'} propertyType - Type de bien
- * @param {number} agencyFees - Frais d'agence (€), optionnel
+ * @param {number} agencyFees      - Frais d'agence : montant € ou taux %
+ * @param {'€'|'%'} agencyFeesMode - Mode de saisie des frais d'agence
  * @returns {{ maxPrice: number, notaryFees: number, totalBudget: number, agencyFees: number }}
  */
-export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0) {
+export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€') {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
   const totalBudget = borrowingCapacity + personalContribution
-  const available = totalBudget - agencyFees
-  const maxPrice = Math.round(available / (1 + notaryRate) * 100) / 100
-  const notaryFees = Math.round((maxPrice * notaryRate) * 100) / 100
+  const available = totalBudget
 
-  return { maxPrice, notaryFees, totalBudget, agencyFees }
+  let maxPrice, agencyFeesAmount
+
+  if (agencyFeesMode === '%') {
+    const agencyRate = (agencyFees || 0) / 100
+    // Résolution analytique : prix = disponible / (1 + tauxNotaire + tauxAgence)
+    maxPrice = Math.round(available / (1 + notaryRate + agencyRate) * 100) / 100
+    agencyFeesAmount = Math.round(maxPrice * agencyRate * 100) / 100
+  } else {
+    agencyFeesAmount = agencyFees || 0
+    maxPrice = Math.round((available - agencyFeesAmount) / (1 + notaryRate) * 100) / 100
+  }
+
+  const notaryFees = Math.round(maxPrice * notaryRate * 100) / 100
+
+  return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount }
+}
+
+/**
+ * Calcule le montant à emprunter à partir d'un prix de bien connu.
+ * coûtTotal = prix + fraisNotaire + fraisAgence
+ * montantEmprunt = max(0, coûtTotal - apport)
+ *
+ * @param {number} propertyPrice       - Prix du bien (€)
+ * @param {'ancien'|'neuf'} propertyType - Type de bien
+ * @param {number} agencyFees          - Frais d'agence : montant € ou taux %
+ * @param {'€'|'%'} agencyFeesMode     - Mode de saisie des frais d'agence
+ * @param {number} personalContribution - Apport personnel (€)
+ * @returns {{ loanAmount: number, notaryFees: number, agencyFees: number, totalCost: number }}
+ */
+export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0, agencyFeesMode = '€', personalContribution = 0) {
+  const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
+  const notaryFees = Math.round(propertyPrice * notaryRate * 100) / 100
+
+  const agencyFeesAmount = agencyFeesMode === '%'
+    ? Math.round(propertyPrice * (agencyFees || 0) / 100 * 100) / 100
+    : (agencyFees || 0)
+
+  const totalCost = Math.round((propertyPrice + notaryFees + agencyFeesAmount) * 100) / 100
+  const loanAmount = Math.max(0, Math.round((totalCost - personalContribution) * 100) / 100)
+
+  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, totalCost }
 }
 
 /**

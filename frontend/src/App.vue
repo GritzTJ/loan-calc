@@ -50,6 +50,7 @@
           v-if="activeTab === 'capacity'"
           :load-params="loadParamsCapacity"
         />
+        <LoanProject v-if="activeTab === 'project'" />
         <LoanComparison v-if="activeTab === 'comparison'" />
         <SimulationHistory
           v-if="activeTab === 'history'"
@@ -60,7 +61,7 @@
 
     <!-- Footer -->
     <footer class="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
-      Simulateur de prêt immobilier — v2.1.0 — Usage personnel
+      Simulateur de prêt immobilier — v2.2.0 — Usage personnel
     </footer>
   </div>
 </template>
@@ -71,11 +72,13 @@ import LoanSimulator from './components/LoanSimulator.vue'
 import BorrowingCapacity from './components/BorrowingCapacity.vue'
 import LoanComparison from './components/LoanComparison.vue'
 import SimulationHistory from './components/SimulationHistory.vue'
+import LoanProject from './components/LoanProject.vue'
 import { useTheme } from './composables/useTheme.js'
 
 const tabs = [
   { id: 'simulator', label: 'Simulateur' },
   { id: 'capacity', label: 'Capacité' },
+  { id: 'project', label: 'Projet' },
   { id: 'comparison', label: 'Comparer' },
   { id: 'history', label: 'Historique' }
 ]

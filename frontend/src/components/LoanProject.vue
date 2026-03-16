@@ -1,15 +1,26 @@
 <template>
-  <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-5">
-    <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Prix du bien accessible</h3>
+  <div>
+    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-5">Projet d'achat</h2>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+      Vous connaissez le prix du bien — calculez le montant à emprunter.
+    </p>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- Prix du bien -->
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Prix du bien (€)
+        </label>
+        <NumberInput v-model="propertyPrice" placeholder="300 000" />
+      </div>
+
       <!-- Apport personnel -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Apport personnel (€)</label>
-        <NumberInput
-          v-model="personalContribution"
-          placeholder="0"
-        />
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Apport personnel (€)
+          <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
+        </label>
+        <NumberInput v-model="personalContribution" placeholder="0" />
       </div>
 
       <!-- Frais d'agence -->
@@ -37,10 +48,7 @@
             >% du prix</button>
           </div>
         </div>
-        <NumberInput
-          v-model="agencyFees"
-          :placeholder="agencyFeesMode === '%' ? '0' : '0'"
-        />
+        <NumberInput v-model="agencyFees" placeholder="0" />
       </div>
 
       <!-- Type de bien -->
@@ -70,23 +78,29 @@
     </div>
 
     <!-- Résultats -->
-    <div v-if="borrowingCapacity > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
+    <div v-if="isValid" class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
+      <!-- Montant à emprunter (mis en avant) -->
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Prix max du bien</div>
-        <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Montant à emprunter</div>
+        <div class="text-xl font-bold text-green-700 dark:text-green-400 mt-1">{{ formatCurrency(result.loanAmount) }}</div>
       </div>
+
+      <!-- Frais de notaire -->
       <div class="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais de notaire</div>
-        <div class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(result.notaryFees) }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Frais de notaire</div>
+        <div class="text-xl font-bold text-orange-600 dark:text-orange-400 mt-1">{{ formatCurrency(result.notaryFees) }}</div>
       </div>
-      <!-- Frais d'agence (affiché uniquement si renseigné) -->
+
+      <!-- Frais d'agence (uniquement si > 0) -->
       <div v-if="result.agencyFees > 0" class="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais d'agence</div>
-        <div class="text-xl font-bold text-purple-700 dark:text-purple-400">{{ formatCurrency(result.agencyFees) }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Frais d'agence</div>
+        <div class="text-xl font-bold text-purple-700 dark:text-purple-400 mt-1">{{ formatCurrency(result.agencyFees) }}</div>
       </div>
+
+      <!-- Coût total -->
       <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Budget total</div>
-        <div class="text-xl font-bold text-blue-700 dark:text-blue-400">{{ formatCurrency(result.totalBudget) }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Coût total acquisition</div>
+        <div class="text-xl font-bold text-blue-700 dark:text-blue-400 mt-1">{{ formatCurrency(result.totalCost) }}</div>
       </div>
     </div>
   </div>
@@ -94,28 +108,24 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { calculateMaxPropertyPrice, formatCurrency } from '../services/loanCalculator.js'
+import { calculateLoanAmount, formatCurrency } from '../services/loanCalculator.js'
 import NumberInput from './NumberInput.vue'
 
-const props = defineProps({
-  borrowingCapacity: {
-    type: Number,
-    default: 0
-  }
-})
-
-const personalContribution = ref(0)
+const propertyPrice = ref(null)
+const personalContribution = ref(null)
 const agencyFees = ref(null)
 const agencyFeesMode = ref('€')
 const propertyType = ref('ancien')
 
+const isValid = computed(() => (propertyPrice.value || 0) > 0)
+
 const result = computed(() =>
-  calculateMaxPropertyPrice(
-    props.borrowingCapacity,
-    personalContribution.value || 0,
+  calculateLoanAmount(
+    propertyPrice.value || 0,
     propertyType.value,
     agencyFees.value || 0,
-    agencyFeesMode.value
+    agencyFeesMode.value,
+    personalContribution.value || 0
   )
 )
 </script>
