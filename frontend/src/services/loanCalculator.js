@@ -123,13 +123,15 @@ export const NOTARY_FEES = {
  * @param {'ancien'|'neuf'} propertyType - Type de bien
  * @param {number} agencyFees           - Frais d'agence : montant € ou taux %
  * @param {'€'|'%'} agencyFeesMode      - Mode de saisie des frais d'agence
- * @returns {{ maxPrice: number, notaryFees: number, totalBudget: number, agencyFees: number }}
+ * @returns {{ maxPrice, notaryFees, totalBudget, agencyFees, isApportConstrained, minApportNeeded }}
+ *   isApportConstrained : vrai si C2 est la contrainte active (apport trop faible)
+ *   minApportNeeded     : apport minimum pour couvrir les frais sur un bien au prix = capacité d'emprunt
  */
 export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€') {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
   const totalBudget = borrowingCapacity + personalContribution
 
-  let maxPrice, agencyFeesAmount
+  let maxPrice, agencyFeesAmount, minApportNeeded
 
   if (agencyFeesMode === '%') {
     const agencyRate = (agencyFees || 0) / 100
@@ -140,6 +142,8 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
     const c2 = feesRate > 0 ? personalContribution / feesRate : Infinity
     maxPrice = Math.max(0, Math.min(c1, c2))
     agencyFeesAmount = Math.round(maxPrice * agencyRate * 100) / 100
+    // Apport min pour lever la contrainte C2 (couvrir les frais sur un bien = capacité d'emprunt)
+    minApportNeeded = Math.round(feesRate * borrowingCapacity * 100) / 100
   } else {
     agencyFeesAmount = agencyFees || 0
     const apportAfterAgency = Math.max(0, personalContribution - agencyFeesAmount)
@@ -148,12 +152,15 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
     // C2 : apport (après agence) doit couvrir les frais notaire → prix = apportRestant / tauxNotaire
     const c2 = notaryRate > 0 ? apportAfterAgency / notaryRate : Infinity
     maxPrice = Math.max(0, Math.min(c1, c2))
+    // Apport min = frais notaire sur un bien = capacité d'emprunt + frais agence fixes
+    minApportNeeded = Math.round((notaryRate * borrowingCapacity + agencyFeesAmount) * 100) / 100
   }
 
   maxPrice = Math.round(maxPrice * 100) / 100
   const notaryFees = Math.round(maxPrice * notaryRate * 100) / 100
+  const isApportConstrained = personalContribution < minApportNeeded
 
-  return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount }
+  return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount, isApportConstrained, minApportNeeded }
 }
 
 /**

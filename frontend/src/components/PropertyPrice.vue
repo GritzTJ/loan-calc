@@ -69,8 +69,14 @@
       </div>
     </div>
 
-    <!-- Résultats -->
-    <div v-if="borrowingCapacity > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
+    <!-- Avertissement apport insuffisant -->
+    <div v-if="borrowingCapacity > 0 && result.isApportConstrained" class="mt-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+      Apport insuffisant pour couvrir les frais d'acquisition. Il faut au moins
+      <strong>{{ formatCurrency(result.minApportNeeded) }}</strong> d'apport.
+    </div>
+
+    <!-- Résultats (masqués si le prix est 0 — apport trop faible pour tout financement) -->
+    <div v-if="borrowingCapacity > 0 && result.maxPrice > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Prix max du bien</div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
