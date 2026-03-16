@@ -6,13 +6,14 @@
     :value="displayValue"
     :placeholder="placeholder"
     :class="inputClass"
+    @focus="onFocus"
     @input="onInput"
     @blur="onBlur"
   />
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Number, default: null },
@@ -26,61 +27,57 @@ const emit = defineEmits(['update:modelValue'])
 
 const inputRef = ref(null)
 const isFocused = ref(false)
+// Valeur brute affichée pendant la saisie (non reformatée)
+const rawInput = ref('')
 
-// Formate un nombre avec des espaces comme séparateur de milliers (FR)
+// Formate un nombre avec des espaces insécables comme séparateur de milliers
 function formatNumber(value) {
   if (value === null || value === undefined || isNaN(value)) return ''
   const parts = value.toString().split('.')
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0') // espace insécable
-  return parts.join(',')
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0')
+  if (parts[1]) return parts[0] + ',' + parts[1]
+  return parts[0]
 }
 
-// Parse une chaîne en nombre, accepte espaces, virgule ou point
+// Parse une chaîne en nombre : accepte espaces, virgule ou point décimal
 function parseInput(str) {
   if (!str) return null
-  // Retire tous les espaces (normaux et insécables)
   const cleaned = str.replace(/[\s\u00A0]/g, '').replace(',', '.')
   const num = parseFloat(cleaned)
   return isNaN(num) ? null : num
 }
 
-const displayValue = computed(() => formatNumber(props.modelValue))
+// Pendant le focus : affiche la saisie brute de l'utilisateur
+// Hors focus : affiche le nombre formaté avec espaces
+const displayValue = computed(() =>
+  isFocused.value ? rawInput.value : formatNumber(props.modelValue)
+)
+
+function onFocus() {
+  // Initialise la saisie brute avec la valeur actuelle (sans espaces, virgule comme séparateur)
+  rawInput.value = props.modelValue !== null && props.modelValue !== undefined
+    ? String(props.modelValue).replace('.', ',')
+    : ''
+  isFocused.value = true
+}
 
 function onInput(event) {
-  const el = event.target
-  const cursorPos = el.selectionStart
-  const oldValue = el.value
-  const oldLength = oldValue.length
-
-  // Extraire la valeur numérique brute
-  const raw = el.value
-  const parsed = parseInput(raw)
+  rawInput.value = event.target.value
+  const parsed = parseInput(event.target.value)
 
   if (parsed !== null) {
-    // Limite les décimales si nécessaire
     const rounded = props.decimals > 0
       ? Math.round(parsed * Math.pow(10, props.decimals)) / Math.pow(10, props.decimals)
       : Math.round(parsed)
     emit('update:modelValue', rounded)
-
-    // Repositionner le curseur après le reformatage
-    const formatted = formatNumber(rounded)
-    const newLength = formatted.length
-    const diff = newLength - oldLength
-
-    requestAnimationFrame(() => {
-      if (el === document.activeElement) {
-        const newPos = Math.max(0, cursorPos + diff)
-        el.setSelectionRange(newPos, newPos)
-      }
-    })
-  } else if (raw === '' || raw === '-') {
+  } else if (event.target.value === '' || event.target.value === '-') {
     emit('update:modelValue', null)
   }
-  // Si la saisie est invalide (lettres, etc.), on ne met pas à jour
+  // Si invalide (lettres...), on ne met pas à jour le modèle
 }
 
 function onBlur() {
   isFocused.value = false
+  // displayValue basculera automatiquement vers le nombre formaté
 }
 </script>
