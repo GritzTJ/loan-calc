@@ -108,19 +108,22 @@ export const NOTARY_FEES = {
 
 /**
  * Calcule le prix maximal du bien accessible.
- * Prix max = (capital empruntable + apport) / (1 + taux_frais_notaire)
+ * Les frais d'agence ne peuvent pas être financés par le crédit — ils viennent en déduction de l'apport.
+ * Prix max = (capital empruntable + apport - frais d'agence) / (1 + taux_frais_notaire)
  * @param {number} borrowingCapacity - Capital empruntable (€)
  * @param {number} personalContribution - Apport personnel (€)
  * @param {'ancien'|'neuf'} propertyType - Type de bien
- * @returns {{ maxPrice: number, notaryFees: number, totalBudget: number }}
+ * @param {number} agencyFees - Frais d'agence (€), optionnel
+ * @returns {{ maxPrice: number, notaryFees: number, totalBudget: number, agencyFees: number }}
  */
-export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType) {
+export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0) {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
   const totalBudget = borrowingCapacity + personalContribution
-  const maxPrice = Math.round(totalBudget / (1 + notaryRate) * 100) / 100
+  const available = totalBudget - agencyFees
+  const maxPrice = Math.round(available / (1 + notaryRate) * 100) / 100
   const notaryFees = Math.round((maxPrice * notaryRate) * 100) / 100
 
-  return { maxPrice, notaryFees, totalBudget }
+  return { maxPrice, notaryFees, totalBudget, agencyFees }
 }
 
 /**

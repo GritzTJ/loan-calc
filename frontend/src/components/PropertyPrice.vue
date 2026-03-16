@@ -12,8 +12,20 @@
         />
       </div>
 
-      <!-- Type de bien -->
+      <!-- Frais d'agence -->
       <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Frais d'agence (€)
+          <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
+        </label>
+        <NumberInput
+          v-model="agencyFees"
+          placeholder="0"
+        />
+      </div>
+
+      <!-- Type de bien -->
+      <div class="sm:col-span-2">
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type de bien</label>
         <div class="flex gap-3 mt-2">
           <button
@@ -39,7 +51,7 @@
     </div>
 
     <!-- Résultats -->
-    <div v-if="borrowingCapacity > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div v-if="borrowingCapacity > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Prix max du bien</div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
@@ -47,6 +59,11 @@
       <div class="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais de notaire</div>
         <div class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(result.notaryFees) }}</div>
+      </div>
+      <!-- Frais d'agence (affiché uniquement si renseigné) -->
+      <div v-if="result.agencyFees > 0" class="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg p-4 text-center transition-colors">
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Frais d'agence</div>
+        <div class="text-xl font-bold text-purple-700 dark:text-purple-400">{{ formatCurrency(result.agencyFees) }}</div>
       </div>
       <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Budget total</div>
@@ -69,13 +86,15 @@ const props = defineProps({
 })
 
 const personalContribution = ref(0)
+const agencyFees = ref(null)
 const propertyType = ref('ancien')
 
 const result = computed(() =>
   calculateMaxPropertyPrice(
     props.borrowingCapacity,
     personalContribution.value || 0,
-    propertyType.value
+    propertyType.value,
+    agencyFees.value || 0
   )
 )
 </script>

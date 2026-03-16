@@ -17,26 +17,60 @@
       </button>
     </div>
 
+    <!-- Toggle mode de saisie -->
+    <div class="flex gap-3 mb-5">
+      <button
+        @click="inputMode = 'income'"
+        class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-colors"
+        :class="inputMode === 'income'
+          ? 'bg-blue-600 text-white border-blue-600'
+          : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
+      >
+        Par revenus
+      </button>
+      <button
+        @click="inputMode = 'payment'"
+        class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-colors"
+        :class="inputMode === 'payment'
+          ? 'bg-blue-600 text-white border-blue-600'
+          : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
+      >
+        Mensualité connue
+      </button>
+    </div>
+
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <!-- Revenus nets mensuels -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Revenus nets mensuels (€)</label>
-        <NumberInput v-model="monthlyIncome" placeholder="4 000" />
-      </div>
+      <!-- Mode "Par revenus" -->
+      <template v-if="inputMode === 'income'">
+        <!-- Revenus nets mensuels -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Revenus nets mensuels (€)</label>
+          <NumberInput v-model="monthlyIncome" placeholder="4 000" />
+        </div>
 
-      <!-- Charges mensuelles -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Charges mensuelles (€)</label>
-        <NumberInput v-model="monthlyCharges" placeholder="500" />
-      </div>
+        <!-- Charges mensuelles -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Charges mensuelles (€)</label>
+          <NumberInput v-model="monthlyCharges" placeholder="500" />
+        </div>
 
-      <!-- Taux d'endettement -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Taux d'endettement cible (%)</label>
-        <NumberInput v-model="debtRatio" placeholder="35" />
-      </div>
+        <!-- Taux d'endettement -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Taux d'endettement cible (%)</label>
+          <NumberInput v-model="debtRatio" placeholder="35" />
+        </div>
+      </template>
 
-      <!-- Durée souhaitée -->
+      <!-- Mode "Mensualité connue" -->
+      <template v-if="inputMode === 'payment'">
+        <!-- Mensualité directe -->
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mensualité que je peux assumer (€)</label>
+          <NumberInput v-model="directPayment" placeholder="1 200" />
+        </div>
+      </template>
+
+      <!-- Durée souhaitée (toujours visible) -->
       <div>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Durée souhaitée (mois)</label>
         <NumberInput v-model="months" placeholder="240" />
@@ -46,13 +80,13 @@
         </p>
       </div>
 
-      <!-- Taux annuel -->
+      <!-- Taux annuel (toujours visible) -->
       <div>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Taux annuel (%)</label>
         <NumberInput v-model="annualRate" :decimals="2" placeholder="3,50" />
       </div>
 
-      <!-- Taux assurance -->
+      <!-- Taux assurance (toujours visible) -->
       <div>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Taux assurance (%/an)
@@ -83,7 +117,7 @@
       </div>
     </div>
 
-    <!-- Alerte endettement négatif -->
+    <!-- Alerte endettement négatif (mode revenus uniquement) -->
     <div v-if="isValid && maxPayment <= 0" class="mt-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-400">
       Vos charges dépassent la capacité d'endettement. Réduisez vos charges ou augmentez vos revenus.
     </div>
@@ -137,9 +171,17 @@ import PropertyPrice from './PropertyPrice.vue'
 import NumberInput from './NumberInput.vue'
 
 // --- State ---
+const inputMode = ref('income') // 'income' | 'payment'
+
+// Mode "Par revenus"
 const monthlyIncome = ref(4000)
 const monthlyCharges = ref(500)
 const debtRatio = ref(35)
+
+// Mode "Mensualité connue"
+const directPayment = ref(null)
+
+// Communs aux deux modes
 const months = ref(240)
 const annualRate = ref(3.5)
 const insuranceRate = ref(null)
@@ -161,32 +203,38 @@ watch(() => props.loadParams, (p) => {
   months.value = p.months ?? months.value
   annualRate.value = p.annualRate ?? annualRate.value
   insuranceRate.value = p.insuranceRate ?? null
+  // Restaurer le mode si sauvegardé
+  if (p.inputMode) inputMode.value = p.inputMode
+  if (p.directPayment != null) directPayment.value = p.directPayment
 }, { immediate: true })
 
 // --- Computed ---
-const isValid = computed(() =>
-  monthlyIncome.value > 0 && months.value > 0
-  && typeof annualRate.value === 'number' && annualRate.value >= 0
-  && typeof debtRatio.value === 'number' && debtRatio.value > 0
-)
+const isValid = computed(() => {
+  if (months.value <= 0 || typeof annualRate.value !== 'number' || annualRate.value < 0) return false
+  if (inputMode.value === 'income') {
+    return monthlyIncome.value > 0 && typeof debtRatio.value === 'number' && debtRatio.value > 0
+  }
+  return directPayment.value > 0
+})
 
-// La mensualité assurance réduit la capacité de remboursement du crédit
-const monthlyInsurance = computed(() =>
-  // Estimation initiale basée sur un capital fictif 0 → sera affiné une fois le capital connu
-  // On utilise la capacité brute pour estimer l'assurance
-  calculateInsuranceCost(roughCapacity.value, insuranceRate.value)
-)
-
-const maxPaymentGross = computed(() =>
-  calculateMaxMonthlyPayment(monthlyIncome.value, monthlyCharges.value || 0, debtRatio.value)
-)
+// Mensualité brute disponible pour le crédit (avant déduction assurance)
+const maxPaymentGross = computed(() => {
+  if (inputMode.value === 'income') {
+    return calculateMaxMonthlyPayment(monthlyIncome.value, monthlyCharges.value || 0, debtRatio.value)
+  }
+  return directPayment.value || 0
+})
 
 // Capital brut (sans déduire l'assurance) pour estimer l'assurance mensuelle
 const roughCapacity = computed(() =>
   calculateBorrowingCapacity(maxPaymentGross.value, annualRate.value, months.value)
 )
 
-// Mensualité max pour le crédit = mensualité max globale - assurance estimée
+const monthlyInsurance = computed(() =>
+  calculateInsuranceCost(roughCapacity.value, insuranceRate.value)
+)
+
+// Mensualité max pour le crédit = mensualité brute - assurance estimée
 const maxPayment = computed(() =>
   Math.max(0, Math.round((maxPaymentGross.value - monthlyInsurance.value) * 100) / 100)
 )
@@ -198,14 +246,20 @@ const capacity = computed(() =>
 // --- Actions ---
 async function onSave() {
   if (!saveName.value.trim()) return
-  await saveSimulation(saveName.value.trim(), 'capacity', {
-    monthlyIncome: monthlyIncome.value,
-    monthlyCharges: monthlyCharges.value,
-    debtRatio: debtRatio.value,
+  const params = {
+    inputMode: inputMode.value,
     months: months.value,
     annualRate: annualRate.value,
     insuranceRate: insuranceRate.value
-  })
+  }
+  if (inputMode.value === 'income') {
+    params.monthlyIncome = monthlyIncome.value
+    params.monthlyCharges = monthlyCharges.value
+    params.debtRatio = debtRatio.value
+  } else {
+    params.directPayment = directPayment.value
+  }
+  await saveSimulation(saveName.value.trim(), 'capacity', params)
   showSaveModal.value = false
   saveName.value = ''
 }
