@@ -82,8 +82,8 @@
         <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
           Prix max du bien
           <InfoTooltip
-            principe="Minimum des contraintes crédit et apport"
-            :calcul="`C1 (crédit) = ${formatCurrency(result.c1)}, C2 (apport) = ${formatCurrency(result.c2)}`"
+            principe="Minimum des contraintes budget total et apport"
+            :calcul="`C1 (budget) = ${formatCurrency(result.c1)}, C2 (apport) = ${formatCurrency(result.c2)}`"
           />
         </div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
