@@ -124,6 +124,18 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
 }
 
 /**
+ * Calcule la mensualité d'assurance emprunteur.
+ * Formule : mensualité = capital × taux_annuel / 100 / 12
+ * @param {number} principal - Capital emprunté (€)
+ * @param {number} insuranceRate - Taux annuel assurance (ex: 0.30 pour 0,30%)
+ * @returns {number} Mensualité assurance arrondie au centime
+ */
+export function calculateInsuranceCost(principal, insuranceRate) {
+  if (!principal || !insuranceRate) return 0
+  return Math.round(principal * insuranceRate / 100 / 12 * 100) / 100
+}
+
+/**
  * Retourne le 1er du mois prochain comme date de début par défaut.
  * @returns {Date}
  */

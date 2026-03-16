@@ -1,15 +1,20 @@
 # Simulateur de Prêt Immobilier
 
-Application web de simulation de prêt immobilier avec deux modules :
+Application web de simulation de prêt immobilier avec quatre modules :
 
-1. **Simulateur de prêt** — Calcul de mensualité et tableau d'amortissement complet
-2. **Capacité d'emprunt** — Calcul du capital empruntable selon le taux d'endettement, avec estimation du prix du bien accessible (frais de notaire inclus)
+1. **Simulateur de prêt** — Mensualité, tableau d'amortissement, graphique, export Excel
+2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible
+3. **Comparaison de scénarios** — Deux prêts côte à côte avec tableau comparatif
+4. **Historique** — Sauvegarde, rechargement et suppression des simulations
+
+Toutes les calculettes intègrent un champ assurance emprunteur optionnel.
 
 ## Stack technique
 
 - **Frontend** : Vue 3 + Vite + Tailwind CSS
-- **Serveur** : nginx:alpine (fichiers statiques)
-- **Build** : Docker multi-stage (Node 22 → nginx)
+- **Backend** : Express 4 + better-sqlite3
+- **Build** : Docker multi-stage (Node 22 → Node 22 Alpine)
+- **Thème** : clair / sombre / système (toggle dans le header)
 
 ## Prérequis
 
@@ -25,17 +30,30 @@ L'application est accessible via Traefik sur `https://loan-calc.domaine.fr`.
 
 ## Développement local
 
+### Backend
+```bash
+cd backend
+npm install
+DATABASE_PATH=./data/loan-calc.db node index.js
+```
+
+### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev   # proxy /api → localhost:3000 via vite.config.js
 ```
 
-Accessible sur `http://localhost:5173`.
+Frontend sur `http://localhost:5173`, API sur `http://localhost:3000`.
 
 ## Variables d'environnement
 
-Voir `.env.example`. La v1 ne nécessite aucune variable (calculs 100% côté client).
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `DATABASE_PATH` | `./data/loan-calc.db` | Chemin vers la base SQLite |
+| `API_PORT` | `3000` | Port d'écoute du serveur Express |
+
+Voir `.env.example` pour référence.
 
 ## Structure
 
@@ -43,16 +61,22 @@ Voir `.env.example`. La v1 ne nécessite aucune variable (calculs 100% côté cl
 loan-calc/
 ├── docker-compose.yml        # Orchestration Docker + labels Traefik
 ├── Dockerfile                # Build multi-stage
-├── nginx.conf                # Config nginx SPA
+├── backend/
+│   ├── index.js              # Serveur Express (API + static)
+│   ├── db.js                 # Init SQLite
+│   └── routes/
+│       └── simulations.js    # CRUD simulations
 └── frontend/
     └── src/
         ├── components/       # Composants Vue (UI)
-        ├── services/         # Logique métier et abstraction stockage
-        └── assets/           # Styles CSS
+        ├── composables/      # useTheme, useIsDark
+        └── services/         # loanCalculator, storageService, excelExport
 ```
 
-## Notes v2
+## API REST
 
-Le code est structuré pour permettre l'ajout d'une couche de persistance SQLite :
-- `services/loanCalculator.js` : fonctions pures réutilisables côté serveur
-- `services/storageService.js` : interface d'abstraction prête pour des appels API REST
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `GET` | `/api/simulations` | Liste toutes les simulations |
+| `POST` | `/api/simulations` | Crée une simulation `{ name, type, params }` |
+| `DELETE` | `/api/simulations/:id` | Supprime une simulation |

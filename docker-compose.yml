@@ -10,6 +10,8 @@ services:
       - net_loan-calc
     environment:
       - "TZ=Europe/Paris"
+      - "DATABASE_PATH=/usr/src/app/data/loan-calc.db"
+      - "API_PORT=3000"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=net_loan-calc"
@@ -19,7 +21,9 @@ services:
       - "traefik.http.routers.loan-calc.tls.options=tls13only@file"
       - "traefik.http.routers.loan-calc.tls.certresolver=ovhresolver"
       - "traefik.http.routers.loan-calc.middlewares=chain-secure@file"
-      - "traefik.http.services.loan-calc.loadbalancer.server.port=8080"
+      - "traefik.http.services.loan-calc.loadbalancer.server.port=3000"
+    volumes:
+      - ./loan-calc/data:/usr/src/app/data
 
 networks:
   net_loan-calc:

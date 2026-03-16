@@ -5,6 +5,10 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    // Proxy l'API vers le backend Express en développement local
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
   }
 })

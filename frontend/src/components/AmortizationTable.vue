@@ -20,14 +20,24 @@
     <!-- Résumé -->
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
       <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center transition-colors">
-        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Coût total du crédit</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">
+          {{ monthlyInsurance > 0 ? 'Coût intérêts' : 'Coût total du crédit' }}
+        </div>
         <div class="text-lg font-bold text-blue-700 dark:text-blue-400">{{ formatCurrency(totalInterest) }}</div>
+      </div>
+      <!-- Coût assurance (si applicable) -->
+      <div v-if="monthlyInsurance > 0" class="bg-orange-50 dark:bg-orange-900/30 rounded-lg p-3 text-center transition-colors">
+        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Coût assurance</div>
+        <div class="text-lg font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(totalInsurance) }}</div>
       </div>
       <div class="bg-green-50 dark:bg-green-900/30 rounded-lg p-3 text-center transition-colors">
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Total remboursé</div>
-        <div class="text-lg font-bold text-green-700 dark:text-green-400">{{ formatCurrency(totalPaid) }}</div>
+        <div class="text-lg font-bold text-green-700 dark:text-green-400">{{ formatCurrency(totalPaid + totalInsurance) }}</div>
       </div>
-      <div class="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center sm:col-span-1 col-span-2 transition-colors">
+      <div
+        class="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center transition-colors"
+        :class="monthlyInsurance > 0 ? 'sm:col-span-1 col-span-2' : 'sm:col-span-1 col-span-2'"
+      >
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Durée</div>
         <div class="text-lg font-bold text-purple-700 dark:text-purple-400">{{ durationLabel }}</div>
       </div>
@@ -78,10 +88,8 @@ import { exportAmortizationToXlsx } from '../services/excelExport.js'
 import AmortizationChart from './AmortizationChart.vue'
 
 const props = defineProps({
-  rows: {
-    type: Array,
-    default: () => []
-  }
+  rows: { type: Array, default: () => [] },
+  monthlyInsurance: { type: Number, default: 0 }
 })
 
 const totalInterest = computed(() =>
@@ -90,6 +98,10 @@ const totalInterest = computed(() =>
 
 const totalPaid = computed(() =>
   props.rows.reduce((sum, r) => sum + r.payment, 0)
+)
+
+const totalInsurance = computed(() =>
+  Math.round(props.monthlyInsurance * props.rows.length * 100) / 100
 )
 
 const durationLabel = computed(() => {
