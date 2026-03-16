@@ -10,8 +10,6 @@ services:
       - net_loan-calc
     environment:
       - "TZ=Europe/Paris"
-      - "DATABASE_PATH=/usr/src/app/data/loan-calc.db"
-      - "API_PORT=3000"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=net_loan-calc"
