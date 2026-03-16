@@ -75,7 +75,7 @@
           Mensualité crédit
           <InfoTooltip
             principe="Amortissement à taux fixe sur la durée"
-            calcul="Capital × (t / (1 − (1+t)⁻ⁿ)), t = taux annuel / 12"
+            :calcul="`${formatCurrency(principal)} à ${annualRate} % sur ${months} mois`"
           />
         </div>
         <div class="text-3xl font-bold text-blue-700 dark:text-blue-400 mt-1">
@@ -88,7 +88,7 @@
           + Assurance / mois
           <InfoTooltip
             principe="Cotisation assurance emprunteur mensuelle"
-            calcul="Capital × taux assurance annuel / 12"
+            :calcul="`${formatCurrency(principal)} × ${insuranceRate} % / 12`"
           />
         </span>
         <span class="font-semibold text-gray-700 dark:text-gray-300">{{ formatCurrency(monthlyInsurance) }}</span>
@@ -98,7 +98,7 @@
           = Mensualité totale
           <InfoTooltip
             principe="Charge mensuelle totale due à la banque"
-            calcul="Mensualité crédit + assurance mensuelle"
+            :calcul="`${formatCurrency(monthlyPayment)} + ${formatCurrency(monthlyInsurance)}`"
           />
         </span>
         <span class="text-blue-700 dark:text-blue-400">{{ formatCurrency(monthlyPayment + monthlyInsurance) }}</span>

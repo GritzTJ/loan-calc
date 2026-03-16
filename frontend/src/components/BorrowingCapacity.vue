@@ -104,7 +104,7 @@
           <InfoTooltip
             v-if="inputMode === 'income'"
             principe="Plafond d'endettement appliqué aux revenus"
-            calcul="(Revenus × taux d'endettement) − charges"
+            :calcul="`(${formatCurrency(monthlyIncome)} × ${debtRatio} %) − ${formatCurrency(monthlyCharges || 0)}`"
           />
         </div>
         <div class="text-2xl font-bold text-blue-700 dark:text-blue-400 mt-1">
@@ -119,7 +119,7 @@
           Capital empruntable
           <InfoTooltip
             principe="Formule inverse d'amortissement à taux fixe"
-            calcul="Mensualité × (1 − (1+t)⁻ⁿ) / t, t = taux / 12"
+            :calcul="`${formatCurrency(maxPayment)} à ${annualRate} % sur ${months} mois`"
           />
         </div>
         <div class="text-2xl font-bold text-green-700 dark:text-green-400 mt-1">

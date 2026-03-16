@@ -100,7 +100,7 @@
           Montant à emprunter
           <InfoTooltip
             principe="Coût total moins apport, plafonné au prix FAI"
-            calcul="min(prix net vendeur + agence, coût total − apport)"
+            :calcul="`min(FAI = ${formatCurrency((propertyPrice || 0) + result.agencyFees)}, coût − apport = ${formatCurrency(result.totalCost - (personalContribution || 0))})`"
           />
         </div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400 mt-1">{{ formatCurrency(result.loanAmount) }}</div>
@@ -112,7 +112,7 @@
           Frais de notaire
           <InfoTooltip
             principe="Frais d'acquisition non finançables par le crédit"
-            calcul="Prix net vendeur × 8% (ancien) ou × 3% (neuf)"
+            :calcul="`${formatCurrency(propertyPrice || 0)} × ${propertyType === 'ancien' ? '8' : '3'} %`"
           />
         </div>
         <div class="text-xl font-bold text-orange-600 dark:text-orange-400 mt-1">{{ formatCurrency(result.notaryFees) }}</div>
@@ -124,8 +124,8 @@
           Frais d'agence
           <InfoTooltip
             v-if="agencyFeesMode === '%'"
-            principe="Commission d'agence calculée sur le prix du bien"
-            calcul="Prix net vendeur × taux agence"
+            principe="Commission d'agence sur le prix net vendeur"
+            :calcul="`${formatCurrency(propertyPrice || 0)} × ${agencyFees} %`"
           />
         </div>
         <div class="text-xl font-bold text-purple-700 dark:text-purple-400 mt-1">{{ formatCurrency(result.agencyFees) }}</div>
@@ -137,7 +137,7 @@
           Coût total acquisition
           <InfoTooltip
             principe="Somme de tous les postes de dépense"
-            calcul="Prix net vendeur + notaire + agence + frais de dossier"
+            :calcul="`${formatCurrency(propertyPrice || 0)} + ${formatCurrency(result.notaryFees)} + ${formatCurrency(result.agencyFees)}${result.applicationFees > 0 ? ' + ' + formatCurrency(result.applicationFees) : ''}`"
           />
         </div>
         <div class="text-xl font-bold text-blue-700 dark:text-blue-400 mt-1">{{ formatCurrency(result.totalCost) }}</div>

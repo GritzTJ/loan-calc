@@ -82,8 +82,8 @@
         <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
           Prix max du bien
           <InfoTooltip
-            principe="Minimum des contraintes budget et apport"
-            calcul="C1 = (crédit+apport−agence) / (1+notaire) ; C2 = apport / notaire"
+            principe="Minimum des contraintes crédit et apport"
+            :calcul="`C1 (crédit) = ${formatCurrency(result.c1)}, C2 (apport) = ${formatCurrency(result.c2)}`"
           />
         </div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
@@ -93,7 +93,7 @@
           Frais de notaire
           <InfoTooltip
             principe="Frais d'acquisition non finançables par le crédit"
-            calcul="Prix max × 8% (ancien) ou × 3% (neuf)"
+            :calcul="`${formatCurrency(result.maxPrice)} × ${propertyType === 'ancien' ? '8' : '3'} %`"
           />
         </div>
         <div class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(result.notaryFees) }}</div>
@@ -104,8 +104,8 @@
           Frais d'agence
           <InfoTooltip
             v-if="agencyFeesMode === '%'"
-            principe="Commission d'agence calculée sur le prix du bien"
-            calcul="Prix max × taux agence"
+            principe="Commission d'agence sur le prix max du bien"
+            :calcul="`${formatCurrency(result.maxPrice)} × ${agencyFees} %`"
           />
         </div>
         <div class="text-xl font-bold text-purple-700 dark:text-purple-400">{{ formatCurrency(result.agencyFees) }}</div>
@@ -115,7 +115,7 @@
           Budget total
           <InfoTooltip
             principe="Enveloppe totale disponible pour l'achat"
-            calcul="Capital empruntable + apport personnel"
+            :calcul="`${formatCurrency(borrowingCapacity)} + ${formatCurrency(personalContribution || 0)}`"
           />
         </div>
         <div class="text-xl font-bold text-blue-700 dark:text-blue-400">{{ formatCurrency(result.totalBudget) }}</div>
