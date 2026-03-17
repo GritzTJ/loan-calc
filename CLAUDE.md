@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.3.2**
+Simulateur de prêt immobilier — usage personnel — **v2.3.3**
 
 5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
 

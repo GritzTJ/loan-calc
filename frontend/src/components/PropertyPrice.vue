@@ -82,8 +82,8 @@
         <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
           Prix max du bien
           <InfoTooltip
-            principe="Minimum des contraintes budget total et apport"
-            :calcul="`C1 (budget) = ${formatCurrency(result.c1)}, C2 (apport) = ${formatCurrency(result.c2)}`"
+            :principe="priceTooltip.principe"
+            :calcul="priceTooltip.calcul"
           />
         </div>
         <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
@@ -151,4 +151,36 @@ const result = computed(() =>
     agencyFeesMode.value
   )
 )
+
+// Tooltip "Prix max du bien" : affiche la formule qui a déterminé le résultat
+const priceTooltip = computed(() => {
+  const r = result.value
+  const notaryRate = propertyType.value === 'ancien' ? '8' : '3'
+  const isC2Binding = r.c2 <= r.c1
+
+  if (isC2Binding) {
+    // Contrainte apport : apport / tauxNotaire
+    return {
+      principe: 'Limité par l\'apport (frais de notaire)',
+      calcul: `${formatCurrency(personalContribution.value || 0)} ÷ ${notaryRate} % = ${formatCurrency(r.maxPrice)}`
+    }
+  }
+
+  // Contrainte budget : totalBudget / (1 + tauxNotaire [+ tauxAgence%])
+  const total = props.borrowingCapacity + (personalContribution.value || 0)
+  let diviseur
+  if (agencyFeesMode.value === '%' && agencyFees.value) {
+    diviseur = `(1 + ${notaryRate} % + ${agencyFees.value} %)`
+  } else {
+    diviseur = `(1 + ${notaryRate} %)`
+  }
+  const budgetDisplay = agencyFeesMode.value === '€' && agencyFees.value
+    ? `(${formatCurrency(total)} − ${formatCurrency(agencyFees.value)})`
+    : formatCurrency(total)
+
+  return {
+    principe: 'Budget total ÷ frais inclusifs',
+    calcul: `${budgetDisplay} ÷ ${diviseur} = ${formatCurrency(r.maxPrice)}`
+  }
+})
 </script>
