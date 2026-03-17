@@ -89,3 +89,75 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 - Ne pas exposer de ports directement sur l'hôte si ce n'est pas nécessaire (Traefik gère le routage)
 - Ne pas utiliser de secrets ou credentials en dur dans le code ou les fichiers Docker
 
+
+---
+
+# Projet : loan-calc
+
+## Description
+
+Simulateur de prêt immobilier — usage personnel — **v2.3.2**
+
+5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
+
+## Stack technique
+
+| Couche | Techno |
+|--------|--------|
+| Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js |
+| Backend | Node.js 22 + Express 4 + SQLite (better-sqlite3) |
+| Build | Docker multi-stage (`node:22-alpine`) |
+| Dev | Vite sur `:5173` proxy `/api/*` → Express sur `:3000` |
+
+## Fichiers clés
+
+```
+backend/
+  index.js                          — serveur Express (API + static + auth guard)
+  auth.js                           — middleware OIDC (sur feature/oidc)
+  db.js                             — init SQLite
+  routes/simulations.js             — CRUD simulations
+
+frontend/src/
+  services/loanCalculator.js        — toutes les formules financières
+  services/storageService.js        — appels API REST
+  components/                       — un composant Vue par onglet + utilitaires
+    PropertyPrice.vue               — calcul prix max du bien (sous Capacité)
+    InfoTooltip.vue                 — tooltips sur les champs calculés
+```
+
+## Règles métier à ne pas casser
+
+- Les **frais de notaire** ne peuvent **pas** être financés par le crédit → doivent venir de l'apport
+- Les **frais d'agence** peuvent être financés par le crédit (prix FAI = prix net vendeur + agence)
+- **Prix max du bien** = `min(C1, C2)` avec :
+  - `C1 (budget)` = `(borrowingCapacity + apport) / (1 + notaryRate [+ agencyRate%])`
+  - `C2 (apport)` = `apport / notaryRate`
+- Taux notaire : **ancien = 8 %**, **neuf = 3 %**
+
+## Branches Git
+
+- `main` — version stable (v2.3.2)
+- `feature/oidc` — authentification OIDC implémentée, **pas encore mergée** sur main
+
+## Authentification OIDC (`feature/oidc`)
+
+- `backend/auth.js` — openid-client v5, Authorization Code + PKCE, discovery automatique
+- Session en mémoire (express-session), cookie httpOnly/secure, durée 8h
+- Fallback `userinfo` → ID token claims (compatibilité Pocket ID)
+- `app.set('trust proxy', 1)` obligatoire (Traefik termine TLS, Express reçoit HTTP)
+- Provider supportés : **Authentik** (`OIDC_ISSUER` = `.../application/o/loan-calc/`) ou **Pocket ID** (`OIDC_ISSUER` = racine du domaine)
+
+## Variables d'environnement
+
+```dotenv
+DATABASE_PATH=/usr/src/app/data/loan-calc.db
+API_PORT=3000
+
+# OIDC (feature/oidc — à ajouter quand mergé)
+OIDC_ISSUER=
+OIDC_CLIENT_ID=
+OIDC_CLIENT_SECRET=
+OIDC_REDIRECT_URI=
+SESSION_SECRET=        # openssl rand -hex 32
+```
