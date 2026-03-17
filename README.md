@@ -1,11 +1,12 @@
 # Simulateur de Prêt Immobilier
 
-Application web de simulation de prêt immobilier avec quatre modules :
+Application web de simulation de prêt immobilier avec cinq modules :
 
 1. **Simulateur de prêt** — Mensualité, tableau d'amortissement, graphique, export Excel
 2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible
-3. **Comparaison de scénarios** — Deux prêts côte à côte avec tableau comparatif
-4. **Historique** — Sauvegarde, rechargement et suppression des simulations
+3. **Projet** — Vue d'ensemble d'un projet d'achat immobilier
+4. **Comparaison de scénarios** — Deux prêts côte à côte avec tableau comparatif
+5. **Historique** — Sauvegarde, rechargement et suppression des simulations
 
 Toutes les calculettes intègrent un champ assurance emprunteur optionnel.
 
@@ -53,7 +54,21 @@ Frontend sur `http://localhost:5173`, API sur `http://localhost:3000`.
 | `DATABASE_PATH` | `./data/loan-calc.db` | Chemin vers la base SQLite |
 | `API_PORT` | `3000` | Port d'écoute du serveur Express |
 
-Voir `.env.example` pour référence.
+### Authentification OIDC *(branche `feature/oidc`)*
+
+L'authentification est disponible sur la branche `feature/oidc` (pas encore mergée). Elle repose sur un provider OIDC compatible Authorization Code + PKCE (testé avec **Authentik** et **Pocket ID**).
+
+| Variable | Exemple | Description |
+|----------|---------|-------------|
+| `OIDC_ISSUER` | `https://auth.example.fr/application/o/loan-calc/` | URL de discovery du provider |
+| `OIDC_CLIENT_ID` | — | Client ID créé chez le provider |
+| `OIDC_CLIENT_SECRET` | — | Client secret |
+| `OIDC_REDIRECT_URI` | `https://loan-calc.example.fr/auth/callback` | URI de retour après authentification |
+| `SESSION_SECRET` | — | Secret cookie session (min. 32 chars — `openssl rand -hex 32`) |
+
+> Pour tester en local sans HTTPS, ajouter `NODE_ENV=development` (désactive le flag `secure` sur le cookie).
+
+Voir `.env.example` pour référence complète.
 
 ## Structure
 
