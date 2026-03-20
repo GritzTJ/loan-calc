@@ -102,6 +102,9 @@ export async function callbackRoute(req, res) {
       email: userinfo.email || null
     }
 
+    // Conserve l'id_token pour le logout complet (end_session_endpoint)
+    req.session.idToken = tokenSet.id_token
+
     // Nettoie les données OIDC temporaires
     delete req.session.oidcState
     delete req.session.oidcCodeVerifier
@@ -116,9 +119,26 @@ export async function callbackRoute(req, res) {
   }
 }
 
-// Détruit la session et redirige vers la racine (qui relancera le flux OIDC)
-export function logoutRoute(req, res) {
-  req.session.destroy(() => {
+// Détruit la session locale et redirige vers l'end_session_endpoint du provider (logout SSO complet)
+export async function logoutRoute(req, res) {
+  const idToken = req.session.idToken
+
+  req.session.destroy(async () => {
+    try {
+      const client = await getClient()
+      const endSessionUrl = client.issuer.end_session_endpoint
+
+      if (endSessionUrl) {
+        // post_logout_redirect_uri : racine de l'app, dérivée de OIDC_REDIRECT_URI
+        const appRoot = process.env.OIDC_REDIRECT_URI.replace('/auth/callback', '/')
+        const url = new URL(endSessionUrl)
+        url.searchParams.set('post_logout_redirect_uri', appRoot)
+        if (idToken) url.searchParams.set('id_token_hint', idToken)
+        return res.redirect(url.toString())
+      }
+    } catch (err) {
+      console.error('[OIDC] logoutRoute error:', err.message)
+    }
     res.redirect('/')
   })
 }
