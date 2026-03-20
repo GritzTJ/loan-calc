@@ -9,7 +9,7 @@ let oidcClient = null
 // Lazy init via OIDC Discovery (.well-known/openid-configuration)
 async function getClient() {
   if (oidcClient) return oidcClient
-  const issuer = await Issuer.discover(process.env.OIDC_ISSUER)
+  const issuer = await Issuer.discover(process.env.OIDC_ISSUER.replace(/\/$/, ''))
   oidcClient = new issuer.Client({
     client_id: process.env.OIDC_CLIENT_ID,
     client_secret: process.env.OIDC_CLIENT_SECRET,
