@@ -59,14 +59,18 @@
     </main>
 
     <!-- Footer -->
-    <footer class="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-gray-400 dark:text-gray-500">
-      Simulateur de prêt immobilier — v2.3.4 — Usage personnel
+    <footer class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
+      <span>Simulateur de prêt immobilier — v2.4.0 — Usage personnel</span>
+      <span v-if="userName" class="flex items-center gap-2">
+        <span>{{ userName }}</span>
+        <a href="/auth/logout" class="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Déconnexion</a>
+      </span>
     </footer>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import LoanSimulator from './components/LoanSimulator.vue'
 import BorrowingCapacity from './components/BorrowingCapacity.vue'
 import LoanComparison from './components/LoanComparison.vue'
@@ -84,6 +88,19 @@ const tabs = [
 
 const activeTab = ref('simulator')
 const { mode, toggleTheme } = useTheme()
+const userName = ref(null)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/auth/me')
+    if (res.ok) {
+      const user = await res.json()
+      userName.value = user.name
+    }
+  } catch {
+    // silencieux : si /auth/me échoue, on n'affiche simplement pas le nom
+  }
+})
 
 // Params à injecter dans les composants lors d'un chargement depuis l'historique
 const loadParamsLoan = ref(null)
