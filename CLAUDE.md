@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.3.3**
+Simulateur de prêt immobilier — usage personnel — **v2.3.4**
 
 5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
 
@@ -137,7 +137,7 @@ frontend/src/
 
 ## Branches Git
 
-- `main` — version stable (v2.3.2)
+- `main` — version stable (v2.3.4)
 - `feature/oidc` — authentification OIDC implémentée, **pas encore mergée** sur main
 
 ## Authentification OIDC (`feature/oidc`)
@@ -161,3 +161,36 @@ OIDC_CLIENT_SECRET=
 OIDC_REDIRECT_URI=
 SESSION_SECRET=        # openssl rand -hex 32
 ```
+
+---
+
+# Workflow versioning et release
+
+## Convention SemVer
+
+Format : `vMAJEUR.MINEUR.PATCH`
+
+| Type de changement | Incrément | Exemples |
+|-------------------|-----------|---------|
+| Bug fix, ajustement UI, nouvelle feature dans onglet existant | PATCH (Z+1) | tooltip, toggle, champ, style |
+| Nouvel onglet, refonte complète d'une section | MINOR (Y+1) | 6e onglet, refonte Capacité |
+| Refonte majeure de l'app / migration stack | MAJOR (X+1) | Vue 2→3, réécriture backend |
+
+## Fichiers à mettre à jour lors d'un bump de version
+
+1. **`frontend/src/App.vue`** — version affichée dans le footer de l'UI
+2. **`CLAUDE.md`** — version dans la description du projet (ligne "Simulateur de prêt immobilier...") et dans les branches Git (ligne "`main` — version stable")
+
+Les `package.json` (backend `2.0.0`, frontend `1.0.0`) ne sont **pas** synchronisés avec la version produit → ne pas les modifier.
+
+## Fin de chaque session de développement
+
+Une fois le code écrit, Claude :
+1. Propose le numéro de version selon la convention ci-dessus
+2. Met à jour `frontend/src/App.vue` (footer) et `CLAUDE.md` (version)
+3. Inclut le bump dans le commit de la fonctionnalité (pas de commit séparé)
+4. Format de commit : `feat: vX.Y.Z — <description>` ou `fix: vX.Y.Z — <description>`
+
+## Push GitHub
+
+Une fois que l'utilisateur confirme que le code est fonctionnel, Claude pousse sur `main` **sans demander de confirmation supplémentaire**.
