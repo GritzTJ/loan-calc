@@ -1,5 +1,8 @@
-import { Issuer, generators } from 'openid-client'
+import { Issuer, generators, custom } from 'openid-client'
 import session from 'express-session'
+
+// Augmente le timeout HTTP (défaut 3500ms trop court derrière Traefik/TLS)
+custom.setHttpOptionsDefaults({ timeout: 10000 })
 
 let oidcClient = null
 
