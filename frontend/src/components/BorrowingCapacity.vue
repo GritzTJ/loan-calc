@@ -187,7 +187,7 @@ const inputMode = ref('income') // 'income' | 'payment'
 
 // Mode "Par revenus"
 const monthlyIncome = ref(4000)
-const monthlyCharges = ref(500)
+const monthlyCharges = ref(0)
 const debtRatio = ref(35)
 
 // Mode "Mensualité connue"
