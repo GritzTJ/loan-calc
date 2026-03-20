@@ -114,7 +114,7 @@ Simulateur de prêt immobilier — usage personnel — **v2.4.2**
 ```
 backend/
   index.js                          — serveur Express (API + static + auth guard)
-  auth.js                           — middleware OIDC (sur feature/oidc)
+  auth.js                           — middleware OIDC
   db.js                             — init SQLite
   routes/simulations.js             — CRUD simulations
 
@@ -138,9 +138,8 @@ frontend/src/
 ## Branches Git
 
 - `main` — version stable (v2.4.2)
-- `feature/oidc` — authentification OIDC implémentée, **pas encore mergée** sur main
 
-## Authentification OIDC (`feature/oidc`)
+## Authentification OIDC
 
 - `backend/auth.js` — openid-client v5, Authorization Code + PKCE, discovery automatique
 - Session en mémoire (express-session), cookie httpOnly/secure, durée 8h
@@ -154,7 +153,6 @@ frontend/src/
 DATABASE_PATH=/usr/src/app/data/loan-calc.db
 API_PORT=3000
 
-# OIDC (feature/oidc — à ajouter quand mergé)
 OIDC_ISSUER=
 OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=
