@@ -8,7 +8,8 @@ export default defineConfig({
     host: true,
     // Proxy l'API vers le backend Express en développement local
     proxy: {
-      '/api': 'http://localhost:3000'
+      '/api': 'http://localhost:3000',
+      '/auth': 'http://localhost:3000'
     }
   }
 })

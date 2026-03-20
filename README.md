@@ -14,16 +14,19 @@ Toutes les calculettes intègrent un champ assurance emprunteur optionnel.
 
 - **Frontend** : Vue 3 + Vite + Tailwind CSS
 - **Backend** : Express 4 + better-sqlite3
-- **Build** : Docker multi-stage (Node 22 → Node 22 Alpine)
+- **Auth** : OIDC Authorization Code + PKCE (Pocket ID / Authentik)
+- **Build** : Docker multi-stage (Node 22 Alpine)
 - **Thème** : clair / sombre / système (toggle dans le header)
 
 ## Prérequis
 
 - Docker & Docker Compose
+- Un provider OIDC (Pocket ID ou Authentik)
 
 ## Lancement
 
 ```bash
+cp .env.example .env   # puis renseigner les variables OIDC
 docker compose up -d --build
 ```
 
@@ -35,17 +38,19 @@ L'application est accessible via Traefik sur `https://loan-calc.domaine.fr`.
 ```bash
 cd backend
 npm install
-DATABASE_PATH=./data/loan-calc.db node index.js
+DATABASE_PATH=./data/loan-calc.db NODE_ENV=development node index.js
 ```
 
 ### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev   # proxy /api → localhost:3000 via vite.config.js
+npm run dev   # proxy /api et /auth → localhost:3000 via vite.config.js
 ```
 
 Frontend sur `http://localhost:5173`, API sur `http://localhost:3000`.
+
+> `NODE_ENV=development` désactive le flag `secure` sur le cookie de session (nécessaire sans HTTPS en local).
 
 ## Variables d'environnement
 
@@ -54,19 +59,20 @@ Frontend sur `http://localhost:5173`, API sur `http://localhost:3000`.
 | `DATABASE_PATH` | `./data/loan-calc.db` | Chemin vers la base SQLite |
 | `API_PORT` | `3000` | Port d'écoute du serveur Express |
 
-### Authentification OIDC *(branche `feature/oidc`)*
-
-L'authentification est disponible sur la branche `feature/oidc` (pas encore mergée). Elle repose sur un provider OIDC compatible Authorization Code + PKCE (testé avec **Authentik** et **Pocket ID**).
+### Authentification OIDC
 
 | Variable | Exemple | Description |
 |----------|---------|-------------|
-| `OIDC_ISSUER` | `https://auth.example.fr/application/o/loan-calc/` | URL de discovery du provider |
+| `OIDC_ISSUER` | `https://pocket-id.domaine.fr` | URL racine du provider (sans slash final) |
 | `OIDC_CLIENT_ID` | — | Client ID créé chez le provider |
 | `OIDC_CLIENT_SECRET` | — | Client secret |
-| `OIDC_REDIRECT_URI` | `https://loan-calc.example.fr/auth/callback` | URI de retour après authentification |
+| `OIDC_REDIRECT_URI` | `https://loan-calc.domaine.fr/auth/callback` | URI de retour après authentification |
 | `SESSION_SECRET` | — | Secret cookie session (min. 32 chars — `openssl rand -hex 32`) |
 
-> Pour tester en local sans HTTPS, ajouter `NODE_ENV=development` (désactive le flag `secure` sur le cookie).
+**Configuration Pocket ID :**
+- Callback URL : `https://loan-calc.domaine.fr/auth/callback`
+- Post-logout redirect URI : `https://loan-calc.domaine.fr/`
+- PKCE : activé
 
 Voir `.env.example` pour référence complète.
 
@@ -77,7 +83,8 @@ loan-calc/
 ├── docker-compose.yml        # Orchestration Docker + labels Traefik
 ├── Dockerfile                # Build multi-stage
 ├── backend/
-│   ├── index.js              # Serveur Express (API + static)
+│   ├── index.js              # Serveur Express (API + static + auth guard)
+│   ├── auth.js               # Middleware OIDC (session, login, callback, logout)
 │   ├── db.js                 # Init SQLite
 │   └── routes/
 │       └── simulations.js    # CRUD simulations
