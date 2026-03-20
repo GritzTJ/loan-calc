@@ -10,6 +10,8 @@ services:
       - net_loan-calc
     environment:
       - "TZ=Europe/Paris"
+      - "DATABASE_PATH=/usr/src/app/data/loan-calc.db"
+      - "API_PORT=3000"
       - "OIDC_ISSUER=https://auth.homelab.fr/application/o/loan-calc/"
       - "OIDC_CLIENT_ID="
       - "OIDC_CLIENT_SECRET="

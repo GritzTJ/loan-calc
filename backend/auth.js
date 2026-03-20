@@ -1,7 +1,6 @@
 import { Issuer, generators } from 'openid-client'
 import session from 'express-session'
 
-
 let oidcClient = null
 
 // Lazy init via OIDC Discovery (.well-known/openid-configuration)

@@ -107,7 +107,7 @@ Simulateur de prêt immobilier — usage personnel — **v2.4.2**
 | Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js |
 | Backend | Node.js 22 + Express 4 + SQLite (better-sqlite3) |
 | Build | Docker multi-stage (`node:22-alpine`) |
-| Dev | Vite sur `:5173` proxy `/api/*` → Express sur `:3000` |
+| Dev | Vite sur `:5173` proxy `/api/*` et `/auth/*` → Express sur `:3000` |
 
 ## Fichiers clés
 
