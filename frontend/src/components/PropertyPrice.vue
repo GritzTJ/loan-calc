@@ -10,10 +10,6 @@
           v-model="personalContribution"
           placeholder="0"
         />
-        <label class="flex items-center gap-2 mt-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
-          <input type="checkbox" v-model="contributionBoostsPrice" class="rounded" />
-          Inclure dans le budget d'achat
-        </label>
       </div>
 
       <!-- Frais d'agence -->
@@ -145,7 +141,6 @@ const personalContribution = ref(0)
 const agencyFees = ref(null)
 const agencyFeesMode = ref('€')
 const propertyType = ref('ancien')
-const contributionBoostsPrice = ref(true)
 
 const result = computed(() =>
   calculateMaxPropertyPrice(
@@ -153,8 +148,7 @@ const result = computed(() =>
     personalContribution.value || 0,
     propertyType.value,
     agencyFees.value || 0,
-    agencyFeesMode.value,
-    contributionBoostsPrice.value
+    agencyFeesMode.value
   )
 )
 
@@ -165,22 +159,13 @@ const priceTooltip = computed(() => {
   const isC2Binding = r.c2 <= r.c1
 
   if (isC2Binding) {
-    // Contrainte apport : apport / tauxNotaire
     return {
       principe: 'Limité par l\'apport (frais de notaire)',
       calcul: `${formatCurrency(personalContribution.value || 0)} ÷ ${notaryRate} % = ${formatCurrency(r.maxPrice)}`
     }
   }
 
-  // Contrainte budget : c1Base / (1 + tauxNotaire [+ tauxAgence%])
-  // c1Base = crédit seul si toggle off, crédit + apport si toggle on
-  const c1Base = contributionBoostsPrice.value
-    ? props.borrowingCapacity + (personalContribution.value || 0)
-    : props.borrowingCapacity
-  const c1BaseLabel = contributionBoostsPrice.value
-    ? `${formatCurrency(props.borrowingCapacity)} + ${formatCurrency(personalContribution.value || 0)}`
-    : formatCurrency(props.borrowingCapacity)
-
+  const c1BaseLabel = `${formatCurrency(props.borrowingCapacity)} + ${formatCurrency(personalContribution.value || 0)}`
   let diviseur
   if (agencyFeesMode.value === '%' && agencyFees.value) {
     diviseur = `(1 + ${notaryRate} % + ${agencyFees.value} %)`
@@ -191,12 +176,8 @@ const priceTooltip = computed(() => {
     ? `(${c1BaseLabel} − ${formatCurrency(agencyFees.value)})`
     : c1BaseLabel
 
-  const principe = contributionBoostsPrice.value
-    ? 'Budget total ÷ frais inclusifs'
-    : 'Capacité d\'emprunt ÷ frais inclusifs'
-
   return {
-    principe,
+    principe: 'Budget total ÷ frais inclusifs',
     calcul: `${budgetDisplay} ÷ ${diviseur} = ${formatCurrency(r.maxPrice)}`
   }
 })
