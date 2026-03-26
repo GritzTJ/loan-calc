@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.4.2**
+Simulateur de prêt immobilier — usage personnel — **v2.4.3**
 
 5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
 
@@ -137,7 +137,7 @@ frontend/src/
 
 ## Branches Git
 
-- `main` — version stable (v2.4.2)
+- `main` — version stable (v2.4.3)
 
 ## Authentification OIDC
 
@@ -146,6 +146,13 @@ frontend/src/
 - Fallback `userinfo` → ID token claims (compatibilité Pocket ID)
 - `app.set('trust proxy', 1)` obligatoire (Traefik termine TLS, Express reçoit HTTP)
 - Provider supportés : **Authentik** (`OIDC_ISSUER` = `.../application/o/loan-calc/`) ou **Pocket ID** (`OIDC_ISSUER` = racine du domaine)
+
+## CI/CD
+
+- **GitHub Actions** : `.github/workflows/docker-publish.yml`
+- Déclenché au push d'un **tag Git** `v*` (ex: `git tag v2.4.3 && git push origin v2.4.3`)
+- Build l'image Docker multi-stage et la publie sur **GHCR** : `ghcr.io/gritztj/loan-calc:<version>` + `:latest`
+- Le `docker-compose-exemple.yml` utilise directement l'image GHCR (plus de `build: .`)
 
 ## Variables d'environnement
 

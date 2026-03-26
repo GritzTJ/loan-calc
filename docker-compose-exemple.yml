@@ -3,7 +3,7 @@
 #####################
 services:
   loan-calc:
-    build: .
+    image: ghcr.io/gritztj/loan-calc:latest
     container_name: loan-calc
     restart: unless-stopped
     networks:

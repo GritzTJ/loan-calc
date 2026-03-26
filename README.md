@@ -25,12 +25,34 @@ Toutes les calculettes intègrent un champ assurance emprunteur optionnel.
 
 ## Lancement
 
+### Avec l'image GHCR (recommandé)
+
 ```bash
 cp .env.example .env   # puis renseigner les variables OIDC
-docker compose up -d --build
+docker compose up -d
+```
+
+L'image `ghcr.io/gritztj/loan-calc:latest` est automatiquement tirée depuis GitHub Container Registry.
+
+### Build local
+
+```bash
+cp .env.example .env
+docker compose up -d --build   # nécessite build: . dans docker-compose.yml
 ```
 
 L'application est accessible via Traefik sur `https://loan-calc.domaine.fr`.
+
+## CI/CD
+
+L'image Docker est buildée et publiée automatiquement sur **GHCR** via GitHub Actions lors du push d'un tag Git :
+
+```bash
+git tag v2.4.3
+git push origin v2.4.3
+```
+
+Tags générés : `ghcr.io/gritztj/loan-calc:2.4.3`, `ghcr.io/gritztj/loan-calc:2.4`, `ghcr.io/gritztj/loan-calc:latest`.
 
 ## Développement local
 
