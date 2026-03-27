@@ -162,9 +162,9 @@ import NumberInput from './NumberInput.vue'
 import InfoTooltip from './InfoTooltip.vue'
 
 // --- State ---
-const principal = ref(200000)
-const annualRate = ref(3.5)
-const months = ref(240)
+const principal = ref(null)
+const annualRate = ref(null)
+const months = ref(null)
 const insuranceRate = ref(null)
 const applicationFees = ref(null)
 

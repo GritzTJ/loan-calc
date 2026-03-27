@@ -60,7 +60,7 @@
 
     <!-- Footer -->
     <footer class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-      <span>Simulateur de prêt immobilier — v2.4.3 — Usage personnel</span>
+      <span>Simulateur de prêt immobilier — v2.4.4 — Usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Déconnexion</a>

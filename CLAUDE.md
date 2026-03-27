@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.4.3**
+Simulateur de prêt immobilier — usage personnel — **v2.4.4**
 
 5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
 
@@ -137,7 +137,7 @@ frontend/src/
 
 ## Branches Git
 
-- `main` — version stable (v2.4.3)
+- `main` — version stable (v2.4.4)
 
 ## Authentification OIDC
 
