@@ -58,23 +58,9 @@
       </div>
     </main>
 
-    <!-- Bandeau de mise à jour PWA -->
-    <div
-      v-if="needRefresh"
-      class="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 bg-blue-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg"
-    >
-      <span>Nouvelle version disponible</span>
-      <button
-        @click="applyUpdate"
-        class="px-3 py-1 rounded-md bg-white text-blue-700 font-medium hover:bg-blue-50 transition-colors"
-      >
-        Recharger
-      </button>
-    </div>
-
     <!-- Footer -->
     <footer class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-      <span>Simulateur de prêt immobilier — v2.5.0 — Usage personnel</span>
+      <span>Simulateur de prêt immobilier — v2.5.1 — Usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Déconnexion</a>
@@ -91,7 +77,6 @@ import LoanComparison from './components/LoanComparison.vue'
 import SimulationHistory from './components/SimulationHistory.vue'
 import LoanProject from './components/LoanProject.vue'
 import { useTheme } from './composables/useTheme.js'
-import { usePwaUpdate } from './composables/usePwaUpdate.js'
 
 const tabs = [
   { id: 'simulator', label: 'Simulateur' },
@@ -101,9 +86,14 @@ const tabs = [
   { id: 'history', label: 'Historique' }
 ]
 
-const activeTab = ref('simulator')
+// Lecture du paramètre ?tab=... (utilisé par les raccourcis PWA Android)
+const validTabs = ['simulator', 'capacity', 'project', 'comparison', 'history']
+const initialTab = (() => {
+  const param = new URLSearchParams(window.location.search).get('tab')
+  return validTabs.includes(param) ? param : 'simulator'
+})()
+const activeTab = ref(initialTab)
 const { mode, toggleTheme } = useTheme()
-const { needRefresh, applyUpdate } = usePwaUpdate()
 const userName = ref(null)
 
 onMounted(async () => {

@@ -7,6 +7,14 @@ import { sessionMiddleware, requireAuth, loginRoute, callbackRoute, logoutRoute,
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.API_PORT || 3000
 
+// Validation des variables d'environnement obligatoires au démarrage
+const requiredEnv = ['SESSION_SECRET', 'OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'OIDC_REDIRECT_URI']
+const missing = requiredEnv.filter(k => !process.env[k])
+if (missing.length > 0) {
+  console.error(`[boot] Variables d'environnement manquantes : ${missing.join(', ')}`)
+  process.exit(1)
+}
+
 const app = express()
 
 // Nécessaire : Traefik termine TLS, Express reçoit HTTP derrière le reverse proxy

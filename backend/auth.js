@@ -17,8 +17,12 @@ async function getClient() {
 }
 
 export function sessionMiddleware() {
+  const secret = process.env.SESSION_SECRET
+  if (!secret || secret.length < 32) {
+    throw new Error('[OIDC] SESSION_SECRET manquant ou trop court (min. 32 caractères). Génère-le avec : openssl rand -hex 32')
+  }
   return session({
-    secret: process.env.SESSION_SECRET || 'changeme_32chars_minimum',
+    secret,
     resave: false,
     saveUninitialized: false,
     cookie: {

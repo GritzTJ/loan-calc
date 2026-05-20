@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.5.0**
+Simulateur de prêt immobilier — usage personnel — **v2.5.1**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -142,16 +142,17 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.5.0)
+- `main` — version stable (v2.5.1)
 
 ## PWA
 
-- `vite-plugin-pwa` (stratégie `generateSW`) génère `sw.js`, `workbox-*.js` et `manifest.webmanifest` au build
+- `vite-plugin-pwa` (stratégie `generateSW`, `registerType: 'autoUpdate'`) génère `sw.js`, `workbox-*.js` et `manifest.webmanifest`
 - Icônes dans `frontend/public/icons/` (favicon SVG + PNG 192/512/512-maskable + apple-touch-icon 180)
 - Le service worker précache la coquille (HTML/JS/CSS/icônes). `/api/*` et `/auth/*` sont **denylistés** → toujours réseau
 - Backend (`backend/index.js`) expose `manifest.webmanifest`, `sw.js`, `workbox-*.js` et `/icons/*` **avant** le guard OIDC (sinon iOS ne peut pas récupérer le SW). `sw.js` est servi en `no-cache`
 - Si `/auth/me` renvoie 401 (session expirée alors que la PWA est ouverte hors session), `App.vue` redirige vers `/auth/login`
-- Bandeau "Nouvelle version disponible" affiché quand le SW détecte une mise à jour (composable `usePwaUpdate.js`)
+- Mise à jour silencieuse : la nouvelle version s'applique au prochain reload complet de la PWA (pas de bandeau)
+- Raccourcis Android (`shortcuts` dans le manifest) : appui long sur l'icône → onglets directs via `?tab=...`
 
 ## Authentification OIDC
 
