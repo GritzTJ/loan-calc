@@ -36,6 +36,8 @@ docker compose up -d
 
 L'image `ghcr.io/gritztj/loan-calc:latest` est automatiquement tirée depuis GitHub Container Registry.
 
+> Le conteneur tourne en utilisateur `node` (UID 1000). Au premier démarrage, vérifier que le volume `./data` côté hôte est inscriptible par cet UID : `sudo chown -R 1000:1000 ./data`.
+
 ### Build local
 
 ```bash

@@ -1,6 +1,8 @@
 import express from 'express'
+import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import db from './db.js'
 import simulationsRouter from './routes/simulations.js'
 import { sessionMiddleware, requireAuth, loginRoute, callbackRoute, logoutRoute, meRoute } from './auth.js'
 
@@ -21,11 +23,21 @@ const app = express()
 app.set('trust proxy', 1)
 
 app.use(express.json())
-app.use(sessionMiddleware())
+app.use(sessionMiddleware(db))
+
+// Rate limit sur les endpoints OIDC : protection minimale contre les abus.
+// 10 req/min/IP — large pour un usage normal (login + callback), serré contre du scripting.
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please retry later.' }
+})
 
 // Routes d'authentification publiques (avant le guard)
-app.get('/auth/login', loginRoute)
-app.get('/auth/callback', callbackRoute)
+app.get('/auth/login', authLimiter, loginRoute)
+app.get('/auth/callback', authLimiter, callbackRoute)
 app.get('/auth/logout', logoutRoute)
 app.get('/auth/me', meRoute)
 

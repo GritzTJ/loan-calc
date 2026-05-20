@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.5.1**
+Simulateur de prêt immobilier — usage personnel — **v2.5.2**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -142,12 +142,12 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.5.1)
+- `main` — version stable (v2.5.2)
 
 ## PWA
 
 - `vite-plugin-pwa` (stratégie `generateSW`, `registerType: 'autoUpdate'`) génère `sw.js`, `workbox-*.js` et `manifest.webmanifest`
-- Icônes dans `frontend/public/icons/` (favicon SVG + PNG 192/512/512-maskable + apple-touch-icon 180)
+- Icônes dans `frontend/public/icons/` (favicon SVG + PNG 192/512/512-maskable + apple-touch-icon 180 + 12 splash screens iOS `splash-WxH.png` générés par `frontend/scripts/generate-splash.mjs`)
 - Le service worker précache la coquille (HTML/JS/CSS/icônes). `/api/*` et `/auth/*` sont **denylistés** → toujours réseau
 - Backend (`backend/index.js`) expose `manifest.webmanifest`, `sw.js`, `workbox-*.js` et `/icons/*` **avant** le guard OIDC (sinon iOS ne peut pas récupérer le SW). `sw.js` est servi en `no-cache`
 - Si `/auth/me` renvoie 401 (session expirée alors que la PWA est ouverte hors session), `App.vue` redirige vers `/auth/login`
@@ -157,7 +157,9 @@ frontend/
 ## Authentification OIDC
 
 - `backend/auth.js` — openid-client v5, Authorization Code + PKCE, discovery automatique
-- Session en mémoire (express-session), cookie httpOnly/secure, durée 8h
+- Sessions **persistées dans SQLite** via `better-sqlite3-session-store` (table `sessions` dans `loan-calc.db`) → survivent au redémarrage du conteneur, GC auto toutes les 15 min
+- Cookie httpOnly/secure, durée 8h
+- Rate limit 10 req/min/IP sur `/auth/login` et `/auth/callback` (`express-rate-limit`)
 - Fallback `userinfo` → ID token claims (compatibilité Pocket ID)
 - `app.set('trust proxy', 1)` obligatoire (Traefik termine TLS, Express reçoit HTTP)
 - Provider supportés : **Authentik** (`OIDC_ISSUER` = `.../application/o/loan-calc/`) ou **Pocket ID** (`OIDC_ISSUER` = racine du domaine)

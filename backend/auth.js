@@ -1,5 +1,8 @@
 import { Issuer, generators } from 'openid-client'
 import session from 'express-session'
+import sqliteStoreFactory from 'better-sqlite3-session-store'
+
+const SqliteStore = sqliteStoreFactory(session)
 
 let oidcClient = null
 
@@ -16,12 +19,19 @@ async function getClient() {
   return oidcClient
 }
 
-export function sessionMiddleware() {
+export function sessionMiddleware(db) {
   const secret = process.env.SESSION_SECRET
   if (!secret || secret.length < 32) {
     throw new Error('[OIDC] SESSION_SECRET manquant ou trop court (min. 32 caractères). Génère-le avec : openssl rand -hex 32')
   }
+  // Persistance dans loan-calc.db (table `sessions` créée automatiquement)
+  // pour que les sessions survivent aux redémarrages du conteneur.
+  const store = new SqliteStore({
+    client: db,
+    expired: { clear: true, intervalMs: 15 * 60 * 1000 } // GC toutes les 15 min
+  })
   return session({
+    store,
     secret,
     resave: false,
     saveUninitialized: false,

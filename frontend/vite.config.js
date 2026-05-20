@@ -7,7 +7,7 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png'],
+      includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png', 'icons/splash-*.png'],
       manifest: {
         name: 'Simulateur de Prêt Immobilier',
         short_name: 'Loan Calc',
