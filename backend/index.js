@@ -21,6 +21,23 @@ app.get('/auth/callback', callbackRoute)
 app.get('/auth/logout', logoutRoute)
 app.get('/auth/me', meRoute)
 
+// Assets PWA publics : doivent être accessibles sans session,
+// sinon iOS/Android ne peuvent ni installer l'app ni récupérer le service worker.
+const publicDir = join(__dirname, 'public')
+app.get(['/manifest.webmanifest', '/sw.js'], (req, res) => {
+  // sw.js ne doit jamais être mis en cache navigateur (mises à jour)
+  if (req.path === '/sw.js') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  }
+  res.sendFile(join(publicDir, req.path))
+})
+// Workbox runtime (fichiers /workbox-<hash>.js) + icônes : également publics
+app.get(/^\/workbox-[^/]+\.js$/, (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  res.sendFile(join(publicDir, req.path))
+})
+app.use('/icons', express.static(join(publicDir, 'icons')))
+
 // Guard : protège toutes les routes ci-dessous
 app.use(requireAuth)
 
@@ -28,7 +45,6 @@ app.use(requireAuth)
 app.use('/api/simulations', simulationsRouter)
 
 // Frontend statique (build Vue)
-const publicDir = join(__dirname, 'public')
 app.use(express.static(publicDir))
 
 // SPA fallback : renvoie index.html pour toutes les routes non-API

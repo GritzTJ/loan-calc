@@ -96,7 +96,9 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.4.4**
+Simulateur de prêt immobilier — usage personnel — **v2.5.0**
+
+Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
 5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
 
@@ -118,12 +120,15 @@ backend/
   db.js                             — init SQLite
   routes/simulations.js             — CRUD simulations
 
-frontend/src/
-  services/loanCalculator.js        — toutes les formules financières
-  services/storageService.js        — appels API REST
-  components/                       — un composant Vue par onglet + utilitaires
-    PropertyPrice.vue               — calcul prix max du bien (sous Capacité)
-    InfoTooltip.vue                 — tooltips sur les champs calculés
+frontend/
+  public/icons/                     — icônes PWA (svg + png 192/512/maskable/apple)
+  src/
+    services/loanCalculator.js     — toutes les formules financières
+    services/storageService.js     — appels API REST
+    composables/usePwaUpdate.js    — enregistrement service worker + détection update
+    components/                     — un composant Vue par onglet + utilitaires
+      PropertyPrice.vue            — calcul prix max du bien (sous Capacité)
+      InfoTooltip.vue              — tooltips sur les champs calculés
 ```
 
 ## Règles métier à ne pas casser
@@ -137,7 +142,16 @@ frontend/src/
 
 ## Branches Git
 
-- `main` — version stable (v2.4.4)
+- `main` — version stable (v2.5.0)
+
+## PWA
+
+- `vite-plugin-pwa` (stratégie `generateSW`) génère `sw.js`, `workbox-*.js` et `manifest.webmanifest` au build
+- Icônes dans `frontend/public/icons/` (favicon SVG + PNG 192/512/512-maskable + apple-touch-icon 180)
+- Le service worker précache la coquille (HTML/JS/CSS/icônes). `/api/*` et `/auth/*` sont **denylistés** → toujours réseau
+- Backend (`backend/index.js`) expose `manifest.webmanifest`, `sw.js`, `workbox-*.js` et `/icons/*` **avant** le guard OIDC (sinon iOS ne peut pas récupérer le SW). `sw.js` est servi en `no-cache`
+- Si `/auth/me` renvoie 401 (session expirée alors que la PWA est ouverte hors session), `App.vue` redirige vers `/auth/login`
+- Bandeau "Nouvelle version disponible" affiché quand le SW détecte une mise à jour (composable `usePwaUpdate.js`)
 
 ## Authentification OIDC
 

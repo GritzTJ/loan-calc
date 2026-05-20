@@ -10,9 +10,11 @@ Application web de simulation de prêt immobilier avec cinq modules :
 
 Toutes les calculettes intègrent un champ assurance emprunteur optionnel.
 
+L'app est installable comme **PWA** sur mobile (Android / iOS) : icône sur l'écran d'accueil, ouverture plein écran, splash screen.
+
 ## Stack technique
 
-- **Frontend** : Vue 3 + Vite + Tailwind CSS
+- **Frontend** : Vue 3 + Vite + Tailwind CSS + `vite-plugin-pwa` (Workbox)
 - **Backend** : Express 4 + better-sqlite3
 - **Auth** : OIDC Authorization Code + PKCE (Pocket ID / Authentik)
 - **Build** : Docker multi-stage (Node 22 Alpine)
@@ -111,11 +113,19 @@ loan-calc/
 │   └── routes/
 │       └── simulations.js    # CRUD simulations
 └── frontend/
+    ├── public/icons/         # Icônes PWA (svg + png 192/512/maskable/apple)
     └── src/
         ├── components/       # Composants Vue (UI)
-        ├── composables/      # useTheme, useIsDark
+        ├── composables/      # useTheme, useIsDark, usePwaUpdate
         └── services/         # loanCalculator, storageService, excelExport
 ```
+
+## Installation comme PWA
+
+- **Android (Chrome / Edge)** : ouvrir l'app, menu ⋮ → "Ajouter à l'écran d'accueil" (ou bandeau d'installation natif)
+- **iOS (Safari)** : ouvrir l'app, bouton de partage → "Sur l'écran d'accueil"
+
+Une fois installée, l'app s'ouvre en plein écran sans la barre d'URL. Une notification "Nouvelle version disponible" s'affiche automatiquement quand une mise à jour est déployée.
 
 ## API REST
 

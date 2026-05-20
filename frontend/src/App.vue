@@ -58,9 +58,23 @@
       </div>
     </main>
 
+    <!-- Bandeau de mise à jour PWA -->
+    <div
+      v-if="needRefresh"
+      class="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 bg-blue-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg"
+    >
+      <span>Nouvelle version disponible</span>
+      <button
+        @click="applyUpdate"
+        class="px-3 py-1 rounded-md bg-white text-blue-700 font-medium hover:bg-blue-50 transition-colors"
+      >
+        Recharger
+      </button>
+    </div>
+
     <!-- Footer -->
     <footer class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-      <span>Simulateur de prêt immobilier — v2.4.4 — Usage personnel</span>
+      <span>Simulateur de prêt immobilier — v2.5.0 — Usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Déconnexion</a>
@@ -77,6 +91,7 @@ import LoanComparison from './components/LoanComparison.vue'
 import SimulationHistory from './components/SimulationHistory.vue'
 import LoanProject from './components/LoanProject.vue'
 import { useTheme } from './composables/useTheme.js'
+import { usePwaUpdate } from './composables/usePwaUpdate.js'
 
 const tabs = [
   { id: 'simulator', label: 'Simulateur' },
@@ -88,6 +103,7 @@ const tabs = [
 
 const activeTab = ref('simulator')
 const { mode, toggleTheme } = useTheme()
+const { needRefresh, applyUpdate } = usePwaUpdate()
 const userName = ref(null)
 
 onMounted(async () => {
@@ -96,9 +112,13 @@ onMounted(async () => {
     if (res.ok) {
       const user = await res.json()
       userName.value = user.name
+    } else if (res.status === 401) {
+      // PWA installée : le SW peut servir l'index.html depuis le cache
+      // alors que la session a expiré → on déclenche manuellement le login OIDC.
+      window.location.href = '/auth/login'
     }
   } catch {
-    // silencieux : si /auth/me échoue, on n'affiche simplement pas le nom
+    // silencieux : si /auth/me échoue pour cause réseau, on n'affiche pas le nom
   }
 })
 

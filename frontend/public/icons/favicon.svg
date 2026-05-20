@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <!-- Maison stylisée en haut -->
+  <path d="M256 112 L376 208 L376 224 L344 224 L344 240 L168 240 L168 224 L136 224 L136 208 Z" fill="#ffffff"/>
+  <!-- Symbole € centré dans le corps -->
+  <text x="256" y="420" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="240" text-anchor="middle" fill="#ffffff">€</text>
+</svg>
