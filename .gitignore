@@ -8,3 +8,6 @@ backend/data/
 *.db
 *.db-shm
 *.db-wal
+# Fichiers Docker locaux de test (ne pas pousser)
+Dockerfile.local
+docker-compose.local.yml

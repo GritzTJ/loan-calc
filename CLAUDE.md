@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.5.2**
+Simulateur de prêt immobilier — usage personnel — **v2.5.3**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -142,7 +142,7 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.5.2)
+- `main` — version stable (v2.5.3)
 
 ## PWA
 
