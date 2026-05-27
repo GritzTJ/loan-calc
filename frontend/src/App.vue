@@ -21,21 +21,49 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         </button>
-        <!-- Navigation : order-3 + w-full sur mobile (2e ligne, défilable), order-2 + w-auto sur sm+ (1re ligne) -->
-        <nav class="order-3 sm:order-2 w-full sm:w-auto flex gap-1 overflow-x-auto no-scrollbar bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            :ref="el => setTabRef(tab.id, el)"
-            @click="activeTab = tab.id"
-            class="flex-none whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium transition-colors"
-            :class="activeTab === tab.id
-              ? 'bg-white dark:bg-gray-600 text-blue-700 dark:text-blue-400 shadow-sm'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+        <!-- Navigation : order-3 + w-full sur mobile (2e ligne, défilable), order-2 + w-auto sur sm+ (1re ligne).
+             Wrapper relatif pour superposer les chevrons d'indication de défilement. -->
+        <div class="order-3 sm:order-2 w-full sm:w-auto relative">
+          <nav
+            ref="navRef"
+            @scroll="updateScrollState"
+            class="flex gap-1 overflow-x-auto no-scrollbar bg-gray-100 dark:bg-gray-700 rounded-lg p-1"
           >
-            {{ tab.label }}
-          </button>
-        </nav>
+            <button
+              v-for="tab in tabs"
+              :key="tab.id"
+              :ref="el => setTabRef(tab.id, el)"
+              @click="activeTab = tab.id"
+              class="flex-none whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              :class="activeTab === tab.id
+                ? 'bg-white dark:bg-gray-600 text-blue-700 dark:text-blue-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+            >
+              {{ tab.label }}
+            </button>
+          </nav>
+          <!-- Chevrons : signalent qu'il reste des onglets à gauche/droite. Affichés uniquement
+               quand un défilement est possible de ce côté ; donc invisibles si tout tient (desktop).
+               pointer-events-none : ne bloquent pas le tap sur l'onglet partiellement visible dessous. -->
+          <span
+            v-show="canScrollLeft"
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-y-0 left-0 flex items-center px-1 rounded-l-lg bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </span>
+          <span
+            v-show="canScrollRight"
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 rounded-r-lg bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+        </div>
       </div>
     </header>
 
@@ -61,7 +89,7 @@
 
     <!-- Footer -->
     <footer class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-      <span>Simulateur de prêt immobilier — v2.5.3 — Usage personnel</span>
+      <span>Simulateur de prêt immobilier — v2.5.4 — Usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Déconnexion</a>
@@ -71,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import LoanSimulator from './components/LoanSimulator.vue'
 import BorrowingCapacity from './components/BorrowingCapacity.vue'
 import LoanComparison from './components/LoanComparison.vue'
@@ -106,9 +134,33 @@ function setTabRef(id, el) {
 function scrollActiveIntoView(behavior = 'smooth') {
   tabRefs.value[activeTab.value]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior })
 }
-watch(activeTab, () => nextTick(() => scrollActiveIntoView('smooth')))
-// Au montage : cas du raccourci PWA ?tab=history qui ouvre un onglet hors écran.
-onMounted(() => nextTick(() => scrollActiveIntoView('auto')))
+
+// Chevrons d'indication : visibles seulement du côté où il reste des onglets à voir.
+const navRef = ref(null)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+function updateScrollState() {
+  const el = navRef.value
+  if (!el) return
+  canScrollLeft.value = el.scrollLeft > 1
+  // -1 : marge pour les arrondis sub-pixel de largeur
+  canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+}
+
+watch(activeTab, () => nextTick(() => {
+  scrollActiveIntoView('smooth')
+  updateScrollState()
+}))
+
+onMounted(() => {
+  // Au montage : cas du raccourci PWA ?tab=history qui ouvre un onglet hors écran.
+  nextTick(() => {
+    scrollActiveIntoView('auto')
+    updateScrollState()
+  })
+  window.addEventListener('resize', updateScrollState)
+})
+onUnmounted(() => window.removeEventListener('resize', updateScrollState))
 
 onMounted(async () => {
   try {
