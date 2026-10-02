@@ -20,26 +20,23 @@
         </h3>
         <div class="space-y-3">
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Montant (€)</label>
-            <NumberInput v-model="s.principal" placeholder="200 000" />
+            <label :for="`scenario-${i}-principal`" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Montant (€)</label>
+            <NumberInput :id="`scenario-${i}-principal`" v-model="s.principal" placeholder="200 000" />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Taux annuel (%)</label>
-            <NumberInput v-model="s.annualRate" :decimals="2" placeholder="3,50" />
+            <label :for="`scenario-${i}-rate`" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Taux annuel (%)</label>
+            <NumberInput :id="`scenario-${i}-rate`" v-model="s.annualRate" :decimals="2" :max="MAX_RATE" placeholder="3,50" />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Durée (mois)</label>
-            <NumberInput v-model="s.months" placeholder="240" />
-            <p v-if="s.months" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-              = {{ Math.floor(s.months / 12) }} an{{ Math.floor(s.months / 12) > 1 ? 's' : '' }}
-              <span v-if="s.months % 12"> et {{ s.months % 12 }} mois</span>
-            </p>
+            <label :for="`scenario-${i}-months`" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Durée (mois)</label>
+            <NumberInput :id="`scenario-${i}-months`" v-model="s.months" :max="MAX_LOAN_MONTHS" placeholder="240" />
+            <p v-if="s.months" class="text-xs text-gray-400 dark:text-gray-500 mt-1">= {{ formatDuration(s.months) }}</p>
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label :for="`scenario-${i}-insurance`" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
               Assurance (%/an) <span class="font-normal text-gray-400">(opt.)</span>
             </label>
-            <NumberInput v-model="s.insuranceRate" :decimals="2" placeholder="0,30" />
+            <NumberInput :id="`scenario-${i}-insurance`" v-model="s.insuranceRate" :decimals="2" :max="MAX_RATE" placeholder="0,30" />
           </div>
         </div>
       </div>
@@ -85,7 +82,7 @@
     </div>
 
     <p v-if="bothValid" class="mt-2 text-xs text-gray-400 dark:text-gray-500 text-right">
-      ✓ = meilleure valeur · vert = meilleur scénario pour ce critère
+      ✓ : coût total du crédit le plus bas. En vert : la meilleure valeur de chaque ligne.
     </p>
   </div>
 </template>
@@ -96,7 +93,10 @@ import {
   calculateMonthlyPayment,
   calculateInsuranceCost,
   generateAmortizationTable,
-  formatCurrency
+  formatCurrency,
+  formatDuration,
+  MAX_LOAN_MONTHS,
+  MAX_RATE
 } from '../services/loanCalculator.js'
 import NumberInput from './NumberInput.vue'
 
@@ -130,19 +130,13 @@ const results = computed(() => scenarios.value.map(s => {
   }
 }))
 
-// Le scénario avec le coût total (intérêts + assurance) le plus bas
+// Le scénario avec le coût total (intérêts + assurance) le plus bas ; -1 en cas d'égalité
 const bestIndex = computed(() => {
   if (!bothValid.value) return -1
-  return results.value[0].totalCost <= results.value[1].totalCost ? 0 : 1
+  const [a, b] = results.value.map(r => r.totalCost)
+  if (a === b) return -1
+  return a < b ? 0 : 1
 })
-
-function betterMin(i) {
-  // Retourne l'index du scénario avec la valeur la plus basse pour l'item i
-  const [a, b] = comparisonRows.value[i].rawValues
-  if (a < b) return 0
-  if (b < a) return 1
-  return -1
-}
 
 const comparisonRows = computed(() => {
   const r = results.value

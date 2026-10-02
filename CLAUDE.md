@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.5.4**
+Simulateur de prêt immobilier — usage personnel — **v2.5.5**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -123,13 +123,24 @@ backend/
 frontend/
   public/icons/                     — icônes PWA (svg + png 192/512/maskable/apple)
   src/
-    services/loanCalculator.js     — toutes les formules financières
-    services/storageService.js     — appels API REST
-    composables/usePwaUpdate.js    — enregistrement service worker + détection update
+    main.js                        — montage Vue + enregistrement du service worker (autoUpdate)
+    services/loanCalculator.js     — toutes les formules financières (+ formatage, bornes de saisie)
+    services/loanCalculator.test.js — tests Vitest des formules et des règles métier
+    services/storageService.js     — appels API REST (lève une `ApiError` en cas d'échec)
     components/                     — un composant Vue par onglet + utilitaires
       PropertyPrice.vue            — calcul prix max du bien (sous Capacité)
-      InfoTooltip.vue              — tooltips sur les champs calculés
+      FormField.vue                — libellé relié à son champ (`for`/`id` via `useId`)
+      NumberInput.vue              — saisie numérique formatée, bornée (`min`/`max`)
+      SegmentedControl.vue         — groupe de boutons à choix unique
+      SaveSimulation.vue           — bouton « Enregistrer » + modale `<dialog>` (erreur affichée, pas d'échec silencieux)
+      InfoTooltip.vue              — tooltips sur les champs calculés (survol, tap et clavier)
 ```
+
+## Tests
+
+- `cd frontend && npm test` — Vitest sur `loanCalculator.js`
+- `cd backend && npm test` — `node --test` : routeur simulations (base `:memory:`) et `safeReturnTo`
+- Les deux suites tournent dans GitHub Actions (job `test`) avant le build de l'image
 
 ## Règles métier à ne pas casser
 
@@ -139,16 +150,20 @@ frontend/
   - `C1 (budget)` = `(borrowingCapacity + apport) / (1 + notaryRate [+ agencyRate%])`
   - `C2 (apport)` = `apport / notaryRate`
 - Taux notaire : **ancien = 8 %**, **neuf = 3 %**
+- Les **frais de dossier** ne peuvent **pas** être financés par le crédit → apport, comme le notaire (`fundingGap = notaire + dossier − apport`)
+- **Apport pour utiliser toute la capacité** (`minApportNeeded`) = point où C1 = C2 : `notaryRate × (capacité − agence€)` ou `notaryRate × capacité / (1 + agencyRate%)`. Ne pas le calculer comme `notaryRate × C1` (C1 dépend de l'apport)
+- **Capacité avec assurance** : le budget mensuel couvre crédit + assurance → `capital = budget / (k + tauxAssurance/1200)`, `k` = mensualité par euro emprunté
+- Tous les onglets sont sous `<KeepAlive>` : la saisie est conservée quand on change d'onglet
 
 ## Branches Git
 
-- `main` — version stable (v2.5.4)
+- `main` — version stable (v2.5.5)
 
 ## PWA
 
 - `vite-plugin-pwa` (stratégie `generateSW`, `registerType: 'autoUpdate'`) génère `sw.js`, `workbox-*.js` et `manifest.webmanifest`
 - Icônes dans `frontend/public/icons/` (favicon SVG + PNG 192/512/512-maskable + apple-touch-icon 180 + 12 splash screens iOS `splash-WxH.png` générés par `frontend/scripts/generate-splash.mjs`)
-- Le service worker précache la coquille (HTML/JS/CSS/icônes). `/api/*` et `/auth/*` sont **denylistés** → toujours réseau
+- Le service worker précache la coquille (HTML/JS/CSS/icônes, hors splash iOS). `/api/*` et `/auth/*` sont **denylistés** → toujours réseau
 - Backend (`backend/index.js`) expose `manifest.webmanifest`, `sw.js`, `workbox-*.js` et `/icons/*` **avant** le guard OIDC (sinon iOS ne peut pas récupérer le SW). `sw.js` est servi en `no-cache`
 - Si `/auth/me` renvoie 401 (session expirée alors que la PWA est ouverte hors session), `App.vue` redirige vers `/auth/login`
 - Mise à jour silencieuse : la nouvelle version s'applique au prochain reload complet de la PWA (pas de bandeau)
@@ -159,6 +174,10 @@ frontend/
 - `backend/auth.js` — openid-client v5, Authorization Code + PKCE, discovery automatique
 - Sessions **persistées dans SQLite** via `better-sqlite3-session-store` (table `sessions` dans `loan-calc.db`) → survivent au redémarrage du conteneur, GC auto toutes les 15 min
 - Cookie httpOnly/secure, durée 8h
+- Après login, retour vers `returnTo` **validé par `safeReturnTo`** (chemin interne uniquement, jamais `//hôte`) ; mémorisé seulement pour une navigation HTML
+- `session.regenerate()` au callback (nouvel identifiant de session à l'authentification)
+- Échec du callback → page d'erreur avec lien « Réessayer » (pas de redirection automatique vers `/auth/login`, qui bouclerait)
+- L'image Docker fixe `NODE_ENV=production` (pas de stack trace dans les réponses d'erreur)
 - Rate limit 10 req/min/IP sur `/auth/login` et `/auth/callback` (`express-rate-limit`)
 - Fallback `userinfo` → ID token claims (compatibilité Pocket ID)
 - `app.set('trust proxy', 1)` obligatoire (Traefik termine TLS, Express reçoit HTTP)

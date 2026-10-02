@@ -2,70 +2,39 @@
   <div>
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Simulateur de prêt</h2>
-      <button
-        v-if="isValid"
-        @click="showSaveModal = true"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
-               text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30
-               border border-blue-200 dark:border-blue-800 rounded-lg
-               hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-        </svg>
-        Sauvegarder
-      </button>
+      <SaveSimulation v-if="isValid" placeholder="Ex : Appart Lyon - 20 ans" :save="onSave" />
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <!-- Montant emprunté -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Montant emprunté (€)</label>
-        <NumberInput v-model="principal" placeholder="200 000" />
-      </div>
+      <FormField v-slot="{ id }" label="Montant emprunté (€)">
+        <NumberInput :id="id" v-model="principal" placeholder="200 000" />
+      </FormField>
 
-      <!-- Taux annuel -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Taux annuel (%)</label>
-        <NumberInput v-model="annualRate" :decimals="2" placeholder="3,50" />
-      </div>
+      <FormField v-slot="{ id }" label="Taux annuel (%)">
+        <NumberInput :id="id" v-model="annualRate" :decimals="2" :max="MAX_RATE" placeholder="3,50" />
+      </FormField>
 
-      <!-- Nombre de mensualités -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de mensualités</label>
-        <NumberInput v-model="months" placeholder="240" />
-        <p v-if="months" class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-          = {{ Math.floor(months / 12) }} an{{ Math.floor(months / 12) > 1 ? 's' : '' }}
-          <span v-if="months % 12"> et {{ months % 12 }} mois</span>
-        </p>
-      </div>
+      <FormField label="Nombre de mensualités">
+        <template #default="{ id }">
+          <NumberInput :id="id" v-model="months" :max="MAX_LOAN_MONTHS" placeholder="240" />
+        </template>
+        <template v-if="months" #help>= {{ formatDuration(months) }}</template>
+      </FormField>
 
-      <!-- Date de début -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date de début</label>
-        <input v-model="startDateStr" type="date" class="input-field" />
-        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-          1re mensualité le {{ firstPaymentLabel }}
-        </p>
-      </div>
+      <FormField label="Date de début">
+        <template #default="{ id }">
+          <input :id="id" v-model="startDateStr" type="date" class="input-field" />
+        </template>
+        <template #help>1re mensualité le {{ firstPaymentLabel }}</template>
+      </FormField>
 
-      <!-- Taux assurance (optionnel) -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Taux assurance (%/an)
-          <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
-        </label>
-        <NumberInput v-model="insuranceRate" :decimals="2" placeholder="0,30" />
-      </div>
+      <FormField v-slot="{ id }" label="Taux assurance (%/an)" hint="(optionnel)">
+        <NumberInput :id="id" v-model="insuranceRate" :decimals="2" :max="MAX_RATE" placeholder="0,30" />
+      </FormField>
 
-      <!-- Frais de dossier (optionnel) -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Frais de dossier (€)
-          <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
-        </label>
-        <NumberInput v-model="applicationFees" placeholder="0" />
-      </div>
+      <FormField v-slot="{ id }" label="Frais de dossier (€)" hint="(optionnel)">
+        <NumberInput :id="id" v-model="applicationFees" placeholder="0" />
+      </FormField>
     </div>
 
     <!-- Résultat mensualité -->
@@ -75,7 +44,7 @@
           Mensualité crédit
           <InfoTooltip
             principe="Amortissement à taux fixe sur la durée"
-            :calcul="`${formatCurrency(principal)} à ${annualRate} % sur ${months} mois`"
+            :calcul="`${formatCurrency(principal)} à ${formatPercent(annualRate)} sur ${months} mois`"
           />
         </div>
         <div class="text-3xl font-bold text-blue-700 dark:text-blue-400 mt-1">
@@ -88,7 +57,7 @@
           + Assurance / mois
           <InfoTooltip
             principe="Cotisation assurance emprunteur mensuelle"
-            :calcul="`${formatCurrency(principal)} × ${insuranceRate} % / 12`"
+            :calcul="`${formatCurrency(principal)} × ${formatPercent(insuranceRate)} / 12`"
           />
         </span>
         <span class="font-semibold text-gray-700 dark:text-gray-300">{{ formatCurrency(monthlyInsurance) }}</span>
@@ -112,54 +81,34 @@
       :monthly-insurance="monthlyInsurance"
       :application-fees="applicationFees || 0"
     />
-
-    <!-- Modal de sauvegarde -->
-    <div v-if="showSaveModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showSaveModal = false">
-      <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-80 shadow-xl">
-        <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Nommer la simulation</h3>
-        <input
-          v-model="saveName"
-          type="text"
-          class="input-field mb-4"
-          placeholder="Ex : Appart Lyon - 20 ans"
-          @keyup.enter="onSave"
-          autofocus
-        />
-        <div class="flex gap-2 justify-end">
-          <button
-            @click="showSaveModal = false"
-            class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-          >
-            Annuler
-          </button>
-          <button
-            @click="onSave"
-            :disabled="!saveName.trim()"
-            class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg
-                   hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Sauvegarder
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   calculateMonthlyPayment,
   calculateInsuranceCost,
   generateAmortizationTable,
   getDefaultStartDate,
   formatCurrency,
-  formatDate
+  formatDate,
+  formatDuration,
+  formatPercent,
+  MAX_LOAN_MONTHS,
+  MAX_RATE
 } from '../services/loanCalculator.js'
 import { saveSimulation } from '../services/storageService.js'
 import AmortizationTable from './AmortizationTable.vue'
+import FormField from './FormField.vue'
 import NumberInput from './NumberInput.vue'
 import InfoTooltip from './InfoTooltip.vue'
+import SaveSimulation from './SaveSimulation.vue'
+
+// Permet de charger une simulation depuis l'historique
+const props = defineProps({
+  loadParams: { type: Object, default: null }
+})
 
 // --- State ---
 const principal = ref(null)
@@ -174,28 +123,23 @@ const startDateStr = ref(
   `${defaultDate.getFullYear()}-${String(defaultDate.getMonth() + 1).padStart(2, '0')}-01`
 )
 
-// Modal sauvegarde
-const showSaveModal = ref(false)
-const saveName = ref('')
-
-// Permet de charger une simulation depuis l'historique
-const props = defineProps({
-  loadParams: { type: Object, default: null }
-})
-
 // Quand loadParams change (chargement depuis l'historique), préremplir les champs
-import { watch } from 'vue'
 watch(() => props.loadParams, (p) => {
   if (!p) return
   principal.value = p.principal ?? principal.value
   annualRate.value = p.annualRate ?? annualRate.value
   months.value = p.months ?? months.value
   insuranceRate.value = p.insuranceRate ?? null
+  applicationFees.value = p.applicationFees ?? null
   if (p.startDate) startDateStr.value = p.startDate
 }, { immediate: true })
 
 // --- Computed ---
-const startDate = computed(() => new Date(startDateStr.value + 'T00:00:00'))
+// Champ date vidé : on retombe sur la date par défaut plutôt que d'afficher « Invalid Date » partout
+const startDate = computed(() => {
+  const date = new Date(startDateStr.value + 'T00:00:00')
+  return isNaN(date) ? getDefaultStartDate() : date
+})
 
 const firstPaymentLabel = computed(() => {
   const d = new Date(startDate.value.getFullYear(), startDate.value.getMonth() + 1, 1)
@@ -219,16 +163,15 @@ const amortizationTable = computed(() =>
 )
 
 // --- Actions ---
-async function onSave() {
-  if (!saveName.value.trim()) return
-  await saveSimulation(saveName.value.trim(), 'loan', {
+// Lève une erreur en cas d'échec : SaveSimulation l'affiche et garde la modale ouverte
+function onSave(name) {
+  return saveSimulation(name, 'loan', {
     principal: principal.value,
     annualRate: annualRate.value,
     months: months.value,
     startDate: startDateStr.value,
-    insuranceRate: insuranceRate.value
+    insuranceRate: insuranceRate.value,
+    applicationFees: applicationFees.value
   })
-  showSaveModal.value = false
-  saveName.value = ''
 }
 </script>

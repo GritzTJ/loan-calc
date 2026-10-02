@@ -3,81 +3,33 @@
     <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Prix du bien accessible</h3>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <!-- Apport personnel -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Apport personnel (€)</label>
-        <NumberInput
-          v-model="personalContribution"
-          placeholder="0"
-        />
-      </div>
+      <FormField v-slot="{ id }" label="Apport personnel (€)">
+        <NumberInput :id="id" v-model="personalContribution" placeholder="0" />
+      </FormField>
 
-      <!-- Frais d'agence -->
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Frais d'agence
-            <span class="font-normal text-gray-400 dark:text-gray-500">(optionnel)</span>
-          </label>
-          <!-- Toggle €/% -->
-          <div class="flex gap-1">
-            <button
-              @click="agencyFeesMode = '€'"
-              class="px-2 py-0.5 rounded text-xs font-medium border transition-colors"
-              :class="agencyFeesMode === '€'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
-            >€ fixe</button>
-            <button
-              @click="agencyFeesMode = '%'"
-              class="px-2 py-0.5 rounded text-xs font-medium border transition-colors"
-              :class="agencyFeesMode === '%'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
-            >% du prix</button>
-          </div>
-        </div>
-        <NumberInput
-          v-model="agencyFees"
-          :decimals="2"
-          placeholder="0"
-        />
-      </div>
+      <FormField label="Frais d'agence" hint="(optionnel)">
+        <template #aside>
+          <SegmentedControl v-model="agencyFeesMode" size="sm" aria-label="Unité des frais d'agence" :options="AGENCY_FEES_MODES" />
+        </template>
+        <template #default="{ id }">
+          <NumberInput :id="id" v-model="agencyFees" :decimals="2" placeholder="0" />
+        </template>
+      </FormField>
 
-      <!-- Type de bien -->
-      <div class="sm:col-span-2">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type de bien</label>
-        <div class="flex gap-3 mt-2">
-          <button
-            @click="propertyType = 'ancien'"
-            class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-colors"
-            :class="propertyType === 'ancien'
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
-          >
-            Ancien (8%)
-          </button>
-          <button
-            @click="propertyType = 'neuf'"
-            class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border transition-colors"
-            :class="propertyType === 'neuf'
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'"
-          >
-            Neuf (3%)
-          </button>
-        </div>
-      </div>
+      <FormField v-slot="{ labelId }" class="sm:col-span-2" label="Type de bien" group>
+        <SegmentedControl v-model="propertyType" class="mt-2" :aria-labelledby="labelId" :options="PROPERTY_TYPES" />
+      </FormField>
     </div>
 
-    <!-- Avertissement apport insuffisant -->
+    <!-- L'apport limite le prix : on indique l'apport qui débloquerait toute la capacité d'emprunt -->
     <div v-if="borrowingCapacity > 0 && result.isApportConstrained" class="mt-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-sm text-amber-800 dark:text-amber-300">
-      Apport insuffisant pour couvrir les frais d'acquisition. Il faut au moins
-      <strong>{{ formatCurrency(result.minApportNeeded) }}</strong> d'apport.
+      <template v-if="result.maxPrice > 0">Votre apport limite le prix du bien.</template>
+      <template v-else>Les frais de notaire ne peuvent pas être financés par le crédit : il faut un apport.</template>
+      Avec <strong>{{ formatCurrency(result.minApportNeeded) }}</strong> d'apport, vous utiliseriez toute votre capacité d'emprunt.
     </div>
 
     <!-- Résultats (masqués si le prix est 0 — apport trop faible pour tout financement) -->
-    <div v-if="borrowingCapacity > 0 && result.maxPrice > 0" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
+    <div v-if="borrowingCapacity > 0 && result.maxPrice > 0" class="mt-5 grid grid-cols-1 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
       <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
         <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
           Prix max du bien
@@ -93,7 +45,7 @@
           Frais de notaire
           <InfoTooltip
             principe="Frais d'acquisition non finançables par le crédit"
-            :calcul="`${formatCurrency(result.maxPrice)} × ${propertyType === 'ancien' ? '8' : '3'} %`"
+            :calcul="`${formatCurrency(result.maxPrice)} × ${notaryRateLabel}`"
           />
         </div>
         <div class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(result.notaryFees) }}</div>
@@ -105,7 +57,7 @@
           <InfoTooltip
             v-if="agencyFeesMode === '%'"
             principe="Commission d'agence sur le prix max du bien"
-            :calcul="`${formatCurrency(result.maxPrice)} × ${agencyFees} %`"
+            :calcul="`${formatCurrency(result.maxPrice)} × ${formatPercent(agencyFees)}`"
           />
         </div>
         <div class="text-xl font-bold text-purple-700 dark:text-purple-400">{{ formatCurrency(result.agencyFees) }}</div>
@@ -126,9 +78,18 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { calculateMaxPropertyPrice, formatCurrency } from '../services/loanCalculator.js'
+import {
+  calculateMaxPropertyPrice,
+  formatCurrency,
+  formatPercent,
+  NOTARY_FEES,
+  AGENCY_FEES_MODES,
+  PROPERTY_TYPES
+} from '../services/loanCalculator.js'
+import FormField from './FormField.vue'
 import NumberInput from './NumberInput.vue'
 import InfoTooltip from './InfoTooltip.vue'
+import SegmentedControl from './SegmentedControl.vue'
 
 const props = defineProps({
   borrowingCapacity: {
@@ -141,6 +102,8 @@ const personalContribution = ref(0)
 const agencyFees = ref(null)
 const agencyFeesMode = ref('€')
 const propertyType = ref('ancien')
+
+const notaryRateLabel = computed(() => formatPercent(NOTARY_FEES[propertyType.value] * 100))
 
 const result = computed(() =>
   calculateMaxPropertyPrice(
@@ -155,22 +118,21 @@ const result = computed(() =>
 // Tooltip "Prix max du bien" : affiche la formule qui a déterminé le résultat
 const priceTooltip = computed(() => {
   const r = result.value
-  const notaryRate = propertyType.value === 'ancien' ? '8' : '3'
   const isC2Binding = r.c2 <= r.c1
 
   if (isC2Binding) {
     return {
       principe: 'Limité par l\'apport (frais de notaire)',
-      calcul: `${formatCurrency(personalContribution.value || 0)} ÷ ${notaryRate} % = ${formatCurrency(r.maxPrice)}`
+      calcul: `${formatCurrency(personalContribution.value || 0)} ÷ ${notaryRateLabel.value} = ${formatCurrency(r.maxPrice)}`
     }
   }
 
   const c1BaseLabel = `${formatCurrency(props.borrowingCapacity)} + ${formatCurrency(personalContribution.value || 0)}`
   let diviseur
   if (agencyFeesMode.value === '%' && agencyFees.value) {
-    diviseur = `(1 + ${notaryRate} % + ${agencyFees.value} %)`
+    diviseur = `(1 + ${notaryRateLabel.value} + ${formatPercent(agencyFees.value)})`
   } else {
-    diviseur = `(1 + ${notaryRate} %)`
+    diviseur = `(1 + ${notaryRateLabel.value})`
   }
   const budgetDisplay = agencyFeesMode.value === '€' && agencyFees.value
     ? `(${c1BaseLabel} − ${formatCurrency(agencyFees.value)})`

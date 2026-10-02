@@ -20,8 +20,9 @@
     <!-- Résumé -->
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
       <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center transition-colors">
+        <!-- « Coût total » seulement si les intérêts sont le seul coût (ni assurance, ni frais de dossier) -->
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">
-          {{ monthlyInsurance > 0 ? 'Coût intérêts' : 'Coût total du crédit' }}
+          {{ monthlyInsurance > 0 || applicationFees > 0 ? 'Coût intérêts' : 'Coût total du crédit' }}
         </div>
         <div class="text-lg font-bold text-blue-700 dark:text-blue-400">{{ formatCurrency(totalInterest) }}</div>
       </div>
@@ -39,7 +40,11 @@
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Total remboursé</div>
         <div class="text-lg font-bold text-green-700 dark:text-green-400">{{ formatCurrency(totalPaid + totalInsurance + applicationFees) }}</div>
       </div>
-      <div class="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center transition-colors col-span-2 sm:col-span-1">
+      <!-- Sur 2 colonnes (mobile), la dernière carte occupe la ligne entière quand le nombre de cartes est impair -->
+      <div
+        class="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center transition-colors"
+        :class="{ 'col-span-2 sm:col-span-1': summaryCardCount % 2 === 1 }"
+      >
         <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">Durée</div>
         <div class="text-lg font-bold text-purple-700 dark:text-purple-400">{{ durationLabel }}</div>
       </div>
@@ -85,8 +90,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatCurrency, formatDate } from '../services/loanCalculator.js'
-import { exportAmortizationToXlsx } from '../services/excelExport.js'
+import { formatCurrency, formatDate, formatDuration } from '../services/loanCalculator.js'
 import AmortizationChart from './AmortizationChart.vue'
 
 const props = defineProps({
@@ -107,16 +111,16 @@ const totalInsurance = computed(() =>
   Math.round(props.monthlyInsurance * props.rows.length * 100) / 100
 )
 
-const durationLabel = computed(() => {
-  const months = props.rows.length
-  const years = Math.floor(months / 12)
-  const rem = months % 12
-  if (years === 0) return `${rem} mois`
-  if (rem === 0) return `${years} an${years > 1 ? 's' : ''}`
-  return `${years} an${years > 1 ? 's' : ''} et ${rem} mois`
-})
+const durationLabel = computed(() => formatDuration(props.rows.length))
 
-function onExport() {
+// Intérêts, total remboursé et durée sont toujours affichés ; assurance et frais de dossier seulement s'ils existent
+const summaryCardCount = computed(() =>
+  3 + (props.monthlyInsurance > 0 ? 1 : 0) + (props.applicationFees > 0 ? 1 : 0)
+)
+
+// La librairie Excel est lourde et rarement utilisée : elle n'est chargée qu'au clic
+async function onExport() {
+  const { exportAmortizationToXlsx } = await import('../services/excelExport.js')
   exportAmortizationToXlsx(props.rows)
 }
 </script>

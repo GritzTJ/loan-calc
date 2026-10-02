@@ -44,6 +44,12 @@ export function sessionMiddleware(db) {
   })
 }
 
+// Destination après login : uniquement un chemin interne.
+// "//evil.com" ou "/\evil.com" seraient interprétés par le navigateur comme une autre origine.
+export function safeReturnTo(url) {
+  return typeof url === 'string' && /^\/(?![/\\])/.test(url) ? url : '/'
+}
+
 // Guard : protège toutes les routes montées après lui
 export function requireAuth(req, res, next) {
   if (req.session.user) return next()
@@ -53,8 +59,12 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  // Mémorise l'URL de destination pour y revenir après login
-  req.session.returnTo = req.originalUrl
+  // Mémorise la destination pour y revenir après login — seulement pour une navigation
+  // (une requête d'asset ou de robot ne doit ni écraser la destination ni créer de session).
+  const isNavigation = req.method === 'GET' && (req.get('accept') || '').includes('text/html')
+  if (isNavigation) {
+    req.session.returnTo = safeReturnTo(req.originalUrl)
+  }
   res.redirect('/auth/login')
 }
 
@@ -107,27 +117,47 @@ export async function callbackRoute(req, res) {
       userinfo = tokenSet.claims()
     }
 
-    req.session.user = {
+    const user = {
       sub: userinfo.sub,
       name: userinfo.name || userinfo.preferred_username || userinfo.email || userinfo.sub,
       email: userinfo.email || null
     }
+    const returnTo = safeReturnTo(req.session.returnTo)
 
-    // Conserve l'id_token pour le logout complet (end_session_endpoint)
-    req.session.idToken = tokenSet.id_token
-
-    // Nettoie les données OIDC temporaires
-    delete req.session.oidcState
-    delete req.session.oidcCodeVerifier
-
-    const returnTo = req.session.returnTo || '/'
-    delete req.session.returnTo
-
-    res.redirect(returnTo)
+    // Nouvel identifiant de session à l'authentification (protection contre la fixation de session).
+    // Les données OIDC temporaires (state, code_verifier, returnTo) disparaissent avec l'ancienne session.
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[OIDC] session regenerate error:', err.message)
+        return sendLoginError(res)
+      }
+      req.session.user = user
+      // Conserve l'id_token pour le logout complet (end_session_endpoint)
+      req.session.idToken = tokenSet.id_token
+      res.redirect(returnTo)
+    })
   } catch (err) {
     console.error('[OIDC] callbackRoute error:', err.message)
-    res.redirect('/auth/login')
+    sendLoginError(res)
   }
+}
+
+// Page d'erreur de connexion. On ne redirige pas vers /auth/login : si l'échec est durable
+// (secret invalide, horloge décalée…), cela bouclerait jusqu'au rate limit.
+function sendLoginError(res) {
+  res.status(502).type('html').send(`<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connexion impossible</title>
+  </head>
+  <body>
+    <h1>Connexion impossible</h1>
+    <p>Le fournisseur d'identité n'a pas validé la connexion. Le détail est dans les logs du serveur.</p>
+    <p><a href="/auth/login">Réessayer</a></p>
+  </body>
+</html>`)
 }
 
 // Détruit la session locale et redirige vers l'end_session_endpoint du provider (logout SSO complet)

@@ -9,6 +9,8 @@ RUN npm run build
 # Stage 2 : serveur Express (API + fichiers statiques)
 FROM node:22-alpine
 WORKDIR /usr/src/app
+# Express en mode production : pas de stack trace dans les réponses d'erreur
+ENV NODE_ENV=production
 COPY backend/package*.json ./
 RUN npm ci --omit=dev
 COPY backend/ .

@@ -84,27 +84,51 @@ export function calculateMaxMonthlyPayment(monthlyIncome, monthlyCharges, debtRa
 }
 
 /**
- * Calcule le capital empruntable à partir d'une mensualité donnée.
- * Formule inverse : C = M × (1 − (1 + t)^(−n)) / t
- * @param {number} monthlyPayment - Mensualité (€)
+ * Calcule le capital empruntable à partir d'un budget mensuel donné.
+ * Formule inverse : C = M / k, avec k = t / (1 − (1 + t)^(−n)) la mensualité par euro emprunté.
+ *
+ * Avec assurance, le budget couvre crédit + assurance, et l'assurance dépend elle-même
+ * du capital (C × a / 12). On résout donc directement : C = M / (k + a / 12).
+ *
+ * @param {number} monthlyPayment - Budget mensuel, assurance comprise (€)
  * @param {number} annualRate - Taux annuel (%)
  * @param {number} months - Durée en mois
+ * @param {number} insuranceRate - Taux annuel d'assurance (%), optionnel
  * @returns {number} Capital empruntable (€)
  */
-export function calculateBorrowingCapacity(monthlyPayment, annualRate, months) {
+export function calculateBorrowingCapacity(monthlyPayment, annualRate, months, insuranceRate = 0) {
   if (monthlyPayment <= 0 || months <= 0) return 0
-  if (annualRate === 0) return monthlyPayment * months
 
   const monthlyRate = annualRate / 100 / 12
-  const capacity = monthlyPayment * (1 - Math.pow(1 + monthlyRate, -months)) / monthlyRate
+  const paymentPerEuro = annualRate === 0
+    ? 1 / months
+    : monthlyRate / (1 - Math.pow(1 + monthlyRate, -months))
+  const insurancePerEuro = (insuranceRate || 0) / 100 / 12
+
+  const capacity = monthlyPayment / (paymentPerEuro + insurancePerEuro)
   return Math.round(capacity * 100) / 100
 }
+
+// Bornes de saisie. Sans plafond de durée, un montant tapé par erreur dans le champ « durée »
+// génère un tableau d'amortissement de centaines de milliers de lignes et fige le navigateur.
+export const MAX_LOAN_MONTHS = 600 // 50 ans
+export const MAX_RATE = 100        // %
 
 // Taux de frais de notaire selon le type de bien
 export const NOTARY_FEES = {
   ancien: 0.08, // 8%
   neuf: 0.03    // 3%
 }
+
+// Choix proposés dans les formulaires (Capacité et Projet)
+export const PROPERTY_TYPES = [
+  { value: 'ancien', label: 'Ancien (8 %)' },
+  { value: 'neuf', label: 'Neuf (3 %)' }
+]
+export const AGENCY_FEES_MODES = [
+  { value: '€', label: '€ fixe' },
+  { value: '%', label: '% du prix' }
+]
 
 /**
  * Calcule le prix maximal du bien accessible.
@@ -124,14 +148,18 @@ export const NOTARY_FEES = {
  * @param {'€'|'%'} agencyFeesMode        - Mode de saisie des frais d'agence
  * @returns {{ maxPrice, notaryFees, totalBudget, agencyFees, isApportConstrained, minApportNeeded, c1, c2 }}
  *   c1 / c2 : valeurs des deux contraintes (exposées pour les tooltips)
+ *   minApportNeeded : apport à partir duquel toute la capacité d'emprunt est utilisable
  */
 export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€') {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
   const totalBudget = borrowingCapacity + personalContribution
   const c1Base = totalBudget
 
-  let maxPrice, agencyFeesAmount, c1, c2
+  let maxPrice, agencyFeesAmount, c1, c2, minApportNeeded
 
+  // Apport nécessaire pour utiliser toute la capacité : c'est le point où C1 = C2,
+  // c.-à-d. où le prêt finance exactement le prix FAI et l'apport exactement le notaire.
+  // (Calculer « taux notaire × C1 » serait faux : C1 augmente lui-même avec l'apport.)
   if (agencyFeesMode === '%') {
     const agencyRate = (agencyFees || 0) / 100
     // C1 (budget) : prix × (1 + notaryRate + agencyRate) ≤ c1Base
@@ -140,6 +168,7 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
     c2 = personalContribution / notaryRate
     maxPrice = Math.max(0, Math.min(c1, c2))
     agencyFeesAmount = Math.round(maxPrice * agencyRate * 100) / 100
+    minApportNeeded = notaryRate * borrowingCapacity / (1 + agencyRate)
   } else {
     agencyFeesAmount = agencyFees || 0
     // C1 (budget) : prix × (1 + notaryRate) ≤ c1Base − frais d'agence fixes
@@ -147,15 +176,15 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
     // C2 (apport) : l'apport couvre au minimum les frais de notaire (non finançables)
     c2 = personalContribution / notaryRate
     maxPrice = Math.max(0, Math.min(c1, c2))
+    minApportNeeded = Math.max(0, notaryRate * (borrowingCapacity - agencyFeesAmount))
   }
 
   maxPrice = Math.round(maxPrice * 100) / 100
   c1 = Math.round(c1 * 100) / 100
   c2 = Math.round(c2 * 100) / 100
+  minApportNeeded = Math.round(minApportNeeded * 100) / 100
 
   const notaryFees = Math.round(maxPrice * notaryRate * 100) / 100
-  // Apport minimum = frais de notaire sur le prix C1 (plafond par le budget total)
-  const minApportNeeded = Math.round(c1 * notaryRate * 100) / 100
   const isApportConstrained = personalContribution < minApportNeeded
 
   return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount, isApportConstrained, minApportNeeded, c1, c2 }
@@ -168,10 +197,10 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
  *
  * Les frais d'agence (FAA) peuvent être financés par le crédit (règle bancaire française).
  * Le prêt est donc plafonné au prix FAI = prix net vendeur + frais d'agence.
- * Seuls les frais de notaire ne peuvent pas être financés.
+ * Les frais de notaire et les frais de dossier ne sont pas finançables : ils viennent de l'apport.
  *   montantEmprunt = max(0, min(prixFAI, coûtTotal − apport))
  *
- * fundingGap indique le manque d'apport pour couvrir les frais de notaire uniquement.
+ * fundingGap indique le manque d'apport pour couvrir les frais de notaire et de dossier.
  *
  * @param {number} propertyPrice        - Prix net vendeur (€), hors frais d'agence
  * @param {'ancien'|'neuf'} propertyType - Type de bien
@@ -194,12 +223,12 @@ export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0,
   const totalCost = Math.round((propertyPrice + notaryFees + agencyFeesAmount + appFees) * 100) / 100
 
   // Le prêt peut couvrir prix net vendeur + frais d'agence (= prix FAI)
-  // Seuls les frais de notaire (et de dossier) ne sont pas finançables
+  // Les frais de notaire et de dossier ne sont pas finançables
   const prixFAI = propertyPrice + agencyFeesAmount
   const loanAmount = Math.max(0, Math.round(Math.min(prixFAI, totalCost - personalContribution) * 100) / 100)
 
-  // Apport manquant pour couvrir les frais de notaire (seule partie non finançable)
-  const fundingGap = Math.max(0, Math.round((notaryFees - personalContribution) * 100) / 100)
+  // Apport manquant pour couvrir la partie non finançable (notaire + dossier)
+  const fundingGap = Math.max(0, Math.round((notaryFees + appFees - personalContribution) * 100) / 100)
 
   return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, applicationFees: appFees, totalCost, fundingGap }
 }
@@ -248,4 +277,28 @@ export function formatCurrency(amount) {
     style: 'currency',
     currency: 'EUR'
   }).format(amount)
+}
+
+/**
+ * Formate un taux saisi en pourcentage (ex: 3.5 → "3,5 %").
+ * @param {number} value - Taux déjà exprimé en % (3.5 pour 3,5 %)
+ * @returns {string}
+ */
+export function formatPercent(value) {
+  const number = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 3 }).format(value)
+  return `${number} %`
+}
+
+/**
+ * Exprime une durée en années et mois (ex: 246 → "20 ans et 6 mois").
+ * @param {number} months
+ * @returns {string}
+ */
+export function formatDuration(months) {
+  const years = Math.floor(months / 12)
+  const rem = months % 12
+  const yearsLabel = `${years} an${years > 1 ? 's' : ''}`
+  if (years === 0) return `${rem} mois`
+  if (rem === 0) return yearsLabel
+  return `${yearsLabel} et ${rem} mois`
 }

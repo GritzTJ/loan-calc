@@ -7,7 +7,7 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png', 'icons/splash-*.png'],
+      includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Simulateur de Prêt Immobilier',
         short_name: 'Loan Calc',
@@ -37,6 +37,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api/, /^\/auth/],
         // Ne mets pas l'index en cache pour les routes API/auth — toujours laisser le serveur répondre
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Les splash screens iOS ne servent qu'à l'installation : inutile de les précacher sur chaque appareil
+        globIgnores: ['**/splash-*.png'],
         cleanupOutdatedCaches: true,
         clientsClaim: true
       }

@@ -1,7 +1,8 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
     <!-- Header -->
-    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 transition-colors">
+    <!-- pt = zone sûre : en PWA iOS (viewport-fit=cover + barre d'état translucide), le contenu commence sous l'encoche -->
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 transition-colors pt-[env(safe-area-inset-top)]">
       <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center gap-y-2">
         <!-- Titre (flex-1 pour prendre l'espace disponible sur la 1re ligne) -->
         <h1 class="flex-1 text-lg font-bold text-gray-800 dark:text-gray-100">Simulateur Immobilier</h1>
@@ -10,6 +11,7 @@
           @click="toggleTheme"
           class="order-2 sm:order-3 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           :title="themeTitle"
+          :aria-label="themeTitle"
         >
           <svg v-if="mode === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -70,26 +72,29 @@
     <!-- Contenu principal -->
     <main class="max-w-4xl mx-auto px-4 py-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 transition-colors">
-        <LoanSimulator
-          v-if="activeTab === 'simulator'"
-          :load-params="loadParamsLoan"
-        />
-        <BorrowingCapacity
-          v-if="activeTab === 'capacity'"
-          :load-params="loadParamsCapacity"
-        />
-        <LoanProject v-if="activeTab === 'project'" />
-        <LoanComparison v-if="activeTab === 'comparison'" />
-        <SimulationHistory
-          v-if="activeTab === 'history'"
-          @load="onLoadSimulation"
-        />
+        <!-- KeepAlive : la saisie de chaque onglet est conservée quand on en change -->
+        <KeepAlive>
+          <LoanSimulator
+            v-if="activeTab === 'simulator'"
+            :load-params="loadParamsLoan"
+          />
+          <BorrowingCapacity
+            v-else-if="activeTab === 'capacity'"
+            :load-params="loadParamsCapacity"
+          />
+          <LoanProject v-else-if="activeTab === 'project'" />
+          <LoanComparison v-else-if="activeTab === 'comparison'" />
+          <SimulationHistory
+            v-else-if="activeTab === 'history'"
+            @load="onLoadSimulation"
+          />
+        </KeepAlive>
       </div>
     </main>
 
     <!-- Footer -->
-    <footer class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-      <span>Simulateur de prêt immobilier — v2.5.4 — Usage personnel</span>
+    <footer class="max-w-4xl mx-auto px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+      <span>Simulateur de prêt immobilier — v2.5.5 — Usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Déconnexion</a>

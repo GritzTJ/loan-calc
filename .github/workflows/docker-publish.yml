@@ -10,7 +10,28 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm ci && npm test
+
+      - name: Backend tests
+        working-directory: backend
+        run: npm ci && npm test
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
 
     permissions:

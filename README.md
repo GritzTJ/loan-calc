@@ -30,9 +30,12 @@ L'app est installable comme **PWA** sur mobile (Android / iOS) : icône sur l'é
 ### Avec l'image GHCR (recommandé)
 
 ```bash
-cp .env.example .env   # puis renseigner les variables OIDC
+cp docker-compose-exemple.yml docker-compose.yml
+cp .env.example .env   # puis renseigner les variables OIDC et SESSION_SECRET
 docker compose up -d
 ```
+
+Le `docker-compose.yml` lit toute la configuration dans `.env` (`env_file`) : aucun secret n'est écrit dans le fichier Compose.
 
 L'image `ghcr.io/gritztj/loan-calc:latest` est automatiquement tirée depuis GitHub Container Registry.
 
@@ -41,8 +44,9 @@ L'image `ghcr.io/gritztj/loan-calc:latest` est automatiquement tirée depuis Git
 ### Build local
 
 ```bash
+cp docker-compose-exemple.yml docker-compose.yml   # puis remplacer image: par build: .
 cp .env.example .env
-docker compose up -d --build   # nécessite build: . dans docker-compose.yml
+docker compose up -d --build
 ```
 
 L'application est accessible via Traefik sur `https://loan-calc.domaine.fr`.
@@ -76,6 +80,14 @@ npm run dev   # proxy /api et /auth → localhost:3000 via vite.config.js
 
 Frontend sur `http://localhost:5173`, API sur `http://localhost:3000`.
 
+### Tests
+```bash
+cd frontend && npm test   # formules financières (Vitest)
+cd backend && npm test    # API simulations + redirection après login (node --test)
+```
+
+Les deux suites tournent dans GitHub Actions avant chaque build d'image.
+
 > `NODE_ENV=development` désactive le flag `secure` sur le cookie de session (nécessaire sans HTTPS en local).
 
 ## Variables d'environnement
@@ -106,7 +118,7 @@ Voir `.env.example` pour référence complète.
 
 ```
 loan-calc/
-├── docker-compose.yml        # Orchestration Docker + labels Traefik
+├── docker-compose-exemple.yml # Orchestration Docker + labels Traefik (à copier en docker-compose.yml)
 ├── Dockerfile                # Build multi-stage
 ├── backend/
 │   ├── index.js              # Serveur Express (API + static + auth guard)
@@ -118,7 +130,7 @@ loan-calc/
     ├── public/icons/         # Icônes PWA (svg + png 192/512/maskable/apple)
     └── src/
         ├── components/       # Composants Vue (UI)
-        ├── composables/      # useTheme, useIsDark, usePwaUpdate
+        ├── composables/      # useTheme, useIsDark
         └── services/         # loanCalculator, storageService, excelExport
 ```
 
@@ -127,7 +139,7 @@ loan-calc/
 - **Android (Chrome / Edge)** : ouvrir l'app, menu ⋮ → "Ajouter à l'écran d'accueil" (ou bandeau d'installation natif)
 - **iOS (Safari)** : ouvrir l'app, bouton de partage → "Sur l'écran d'accueil"
 
-Une fois installée, l'app s'ouvre en plein écran sans la barre d'URL. Une notification "Nouvelle version disponible" s'affiche automatiquement quand une mise à jour est déployée.
+Une fois installée, l'app s'ouvre en plein écran sans la barre d'URL. Les mises à jour sont silencieuses : la nouvelle version s'applique au prochain rechargement complet de l'app.
 
 ## API REST
 
