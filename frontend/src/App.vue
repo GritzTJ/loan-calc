@@ -68,7 +68,7 @@
 
     <!-- Le padding bas laisse la place à la barre d'onglets fixe sur téléphone -->
     <footer class="max-w-5xl mx-auto px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
-      <span>Prêt immobilier v2.6.0, usage personnel</span>
+      <span>Prêt immobilier v2.6.1, usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-ink">Déconnexion</a>
