@@ -1,7 +1,7 @@
 <template>
-  <div class="mt-4 mb-6">
-    <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-      Répartition capital / intérêts
+  <div class="mb-6">
+    <h4 class="text-sm font-medium text-ink mb-2">
+      Part de capital et d'intérêts {{ isYearly ? 'par année' : 'par mensualité' }}
     </h4>
     <div class="h-64 sm:h-80">
       <Bar :data="chartData" :options="chartOptions" />
@@ -34,8 +34,10 @@ const { isDark } = useIsDark()
 // Seuil au-delà duquel on agrège par année
 const MONTHLY_THRESHOLD = 120
 
+const isYearly = computed(() => props.rows.length > MONTHLY_THRESHOLD)
+
 const aggregatedData = computed(() => {
-  if (props.rows.length <= MONTHLY_THRESHOLD) {
+  if (!isYearly.value) {
     return {
       labels: props.rows.map(r => `${r.number}`),
       principals: props.rows.map(r => r.principalPart),
@@ -62,51 +64,69 @@ const aggregatedData = computed(() => {
   }
 })
 
-const chartData = computed(() => ({
-  labels: aggregatedData.value.labels,
-  datasets: [
-    {
-      label: 'Part capital',
-      data: aggregatedData.value.principals,
-      backgroundColor: isDark.value ? 'rgba(74, 222, 128, 0.7)' : 'rgba(22, 163, 74, 0.7)'
-    },
-    {
-      label: 'Part intérêts',
-      data: aggregatedData.value.interests,
-      backgroundColor: isDark.value ? 'rgba(248, 113, 113, 0.7)' : 'rgba(220, 38, 38, 0.7)'
-    }
-  ]
-}))
+// Chart.js dessine dans un canvas : il ne voit pas les classes Tailwind. On lit donc les jetons
+// de couleur (main.css) au moment du rendu. La dépendance à isDark force la relecture au changement de thème.
+const palette = computed(() => {
+  isDark.value
+  const styles = getComputedStyle(document.documentElement)
+  const token = (name) => `rgb(${styles.getPropertyValue(`--${name}`).trim().replaceAll(' ', ', ')})`
+  return {
+    capital: token('capital'),
+    interest: token('interest'),
+    surface: token('bg'),
+    text: token('ink-2'),
+    grid: token('line')
+  }
+})
 
-const chartOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      labels: { color: isDark.value ? '#e5e7eb' : '#374151' }
+const chartData = computed(() => {
+  // Liseré couleur de fond : sépare les deux parts empilées et les barres voisines
+  const bar = { borderColor: palette.value.surface, borderWidth: 1, borderRadius: 2 }
+  return {
+    labels: aggregatedData.value.labels,
+    datasets: [
+      { ...bar, label: 'Capital', data: aggregatedData.value.principals, backgroundColor: palette.value.capital },
+      { ...bar, label: 'Intérêts', data: aggregatedData.value.interests, backgroundColor: palette.value.interest }
+    ]
+  }
+})
+
+const chartOptions = computed(() => {
+  const font = { family: '"Archivo Variable", system-ui, sans-serif' }
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        align: 'start',
+        labels: { color: palette.value.text, font, boxWidth: 10, boxHeight: 10 }
+      },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label} : ${formatCurrency(ctx.raw)}`
+        }
+      }
     },
-    tooltip: {
-      mode: 'index',
-      intersect: false,
-      callbacks: {
-        label: (ctx) => `${ctx.dataset.label} : ${formatCurrency(ctx.raw)}`
+    scales: {
+      x: {
+        stacked: true,
+        ticks: { color: palette.value.text, font },
+        grid: { display: false }
+      },
+      y: {
+        stacked: true,
+        ticks: {
+          color: palette.value.text,
+          font,
+          // Axe en euros entiers : les centimes n'apportent rien à cette échelle
+          callback: (v) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
+        },
+        grid: { color: palette.value.grid }
       }
     }
-  },
-  scales: {
-    x: {
-      stacked: true,
-      ticks: { color: isDark.value ? '#9ca3af' : '#6b7280' },
-      grid: { color: isDark.value ? '#374151' : '#e5e7eb' }
-    },
-    y: {
-      stacked: true,
-      ticks: {
-        color: isDark.value ? '#9ca3af' : '#6b7280',
-        callback: (v) => formatCurrency(v)
-      },
-      grid: { color: isDark.value ? '#374151' : '#e5e7eb' }
-    }
   }
-}))
+})
 </script>

@@ -1,141 +1,98 @@
 <template>
-  <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-5">
-    <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Prix du bien accessible</h3>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <FormField v-slot="{ id }" label="Apport personnel (€)">
-        <NumberInput :id="id" v-model="personalContribution" placeholder="0" />
-      </FormField>
-
-      <FormField label="Frais d'agence" hint="(optionnel)">
-        <template #aside>
-          <SegmentedControl v-model="agencyFeesMode" size="sm" aria-label="Unité des frais d'agence" :options="AGENCY_FEES_MODES" />
-        </template>
-        <template #default="{ id }">
-          <NumberInput :id="id" v-model="agencyFees" :decimals="2" placeholder="0" />
-        </template>
-      </FormField>
-
-      <FormField v-slot="{ labelId }" class="sm:col-span-2" label="Type de bien" group>
-        <SegmentedControl v-model="propertyType" class="mt-2" :aria-labelledby="labelId" :options="PROPERTY_TYPES" />
-      </FormField>
-    </div>
+  <div class="mt-6 pt-6 border-t border-line">
+    <p class="flex items-center text-sm text-ink-2">
+      Prix du bien accessible
+      <InfoTooltip v-if="result.maxPrice > 0" :principe="priceTooltip.principe" :calcul="priceTooltip.calcul" />
+    </p>
+    <p class="figure text-xl text-ink mt-1">{{ formatCurrency(result.maxPrice) }}</p>
 
     <!-- L'apport limite le prix : on indique l'apport qui débloquerait toute la capacité d'emprunt -->
-    <div v-if="borrowingCapacity > 0 && result.isApportConstrained" class="mt-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+    <p v-if="result.isApportConstrained" class="notice notice-warn mt-3">
       <template v-if="result.maxPrice > 0">Votre apport limite le prix du bien.</template>
       <template v-else>Les frais de notaire ne peuvent pas être financés par le crédit : il faut un apport.</template>
-      Avec <strong>{{ formatCurrency(result.minApportNeeded) }}</strong> d'apport, vous utiliseriez toute votre capacité d'emprunt.
-    </div>
+      Avec <strong class="figure">{{ formatCurrency(result.minApportNeeded) }}</strong> d'apport, vous utiliseriez toute votre capacité d'emprunt.
+    </p>
 
-    <!-- Résultats (masqués si le prix est 0 — apport trop faible pour tout financement) -->
-    <div v-if="borrowingCapacity > 0 && result.maxPrice > 0" class="mt-5 grid grid-cols-1 gap-3" :class="result.agencyFees > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'">
-      <div class="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center transition-colors">
-        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
-          Prix max du bien
-          <InfoTooltip
-            :principe="priceTooltip.principe"
-            :calcul="priceTooltip.calcul"
-          />
-        </div>
-        <div class="text-xl font-bold text-green-700 dark:text-green-400">{{ formatCurrency(result.maxPrice) }}</div>
-      </div>
-      <div class="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-center transition-colors">
-        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
-          Frais de notaire
+    <!-- Plan de financement : les deux barres partagent la même échelle, ce que le prêt ne peut pas payer se lit à droite -->
+    <template v-if="result.maxPrice > 0">
+      <FundingBar class="mt-5" title="Besoins" :total="needs" :scale="scale" :segments="needSegments">
+        <template #info-notary>
           <InfoTooltip
             principe="Frais d'acquisition non finançables par le crédit"
             :calcul="`${formatCurrency(result.maxPrice)} × ${notaryRateLabel}`"
           />
-        </div>
-        <div class="text-xl font-bold text-orange-600 dark:text-orange-400">{{ formatCurrency(result.notaryFees) }}</div>
-      </div>
-      <!-- Frais d'agence (affiché uniquement si renseigné) -->
-      <div v-if="result.agencyFees > 0" class="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg p-4 text-center transition-colors">
-        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
-          Frais d'agence
-          <InfoTooltip
-            v-if="agencyFeesMode === '%'"
-            principe="Commission d'agence sur le prix max du bien"
-            :calcul="`${formatCurrency(result.maxPrice)} × ${formatPercent(agencyFees)}`"
-          />
-        </div>
-        <div class="text-xl font-bold text-purple-700 dark:text-purple-400">{{ formatCurrency(result.agencyFees) }}</div>
-      </div>
-      <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center transition-colors">
-        <div class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 uppercase">
-          Budget total
-          <InfoTooltip
-            principe="Enveloppe totale disponible pour l'achat"
-            :calcul="`${formatCurrency(borrowingCapacity)} + ${formatCurrency(personalContribution || 0)}`"
-          />
-        </div>
-        <div class="text-xl font-bold text-blue-700 dark:text-blue-400">{{ formatCurrency(result.totalBudget) }}</div>
-      </div>
-    </div>
+        </template>
+      </FundingBar>
+      <FundingBar class="mt-5" title="Ressources" :total="resources" :scale="scale" :segments="resourceSegments" />
+      <p v-if="result.unusedCapacity > 0" class="mt-3 text-sm text-ink-2">
+        Capacité d'emprunt non utilisée :
+        <span class="figure text-ink">{{ formatCurrency(result.unusedCapacity) }}</span>
+      </p>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import {
-  calculateMaxPropertyPrice,
-  formatCurrency,
-  formatPercent,
-  NOTARY_FEES,
-  AGENCY_FEES_MODES,
-  PROPERTY_TYPES
-} from '../services/loanCalculator.js'
-import FormField from './FormField.vue'
-import NumberInput from './NumberInput.vue'
+import { computed } from 'vue'
+import { formatCurrency, formatPercent, NOTARY_FEES } from '../services/loanCalculator.js'
+import FundingBar from './FundingBar.vue'
 import InfoTooltip from './InfoTooltip.vue'
-import SegmentedControl from './SegmentedControl.vue'
 
 const props = defineProps({
-  borrowingCapacity: {
-    type: Number,
-    default: 0
-  }
+  // Résultat de calculateMaxPropertyPrice
+  result: { type: Object, required: true },
+  // Saisies, pour détailler le calcul dans les tooltips
+  borrowingCapacity: { type: Number, default: 0 },
+  personalContribution: { type: Number, default: 0 },
+  agencyFees: { type: Number, default: 0 },
+  agencyFeesMode: { type: String, default: '€' },
+  propertyType: { type: String, default: 'ancien' }
 })
 
-const personalContribution = ref(0)
-const agencyFees = ref(null)
-const agencyFeesMode = ref('€')
-const propertyType = ref('ancien')
+const notaryRateLabel = computed(() => formatPercent(NOTARY_FEES[props.propertyType] * 100))
 
-const notaryRateLabel = computed(() => formatPercent(NOTARY_FEES[propertyType.value] * 100))
-
-const result = computed(() =>
-  calculateMaxPropertyPrice(
-    props.borrowingCapacity,
-    personalContribution.value || 0,
-    propertyType.value,
-    agencyFees.value || 0,
-    agencyFeesMode.value
-  )
+const needs = computed(() =>
+  Math.round((props.result.maxPrice + props.result.agencyFees + props.result.notaryFees) * 100) / 100
 )
 
-// Tooltip "Prix max du bien" : affiche la formule qui a déterminé le résultat
+const resources = computed(() =>
+  Math.round((props.result.loanUsed + props.personalContribution) * 100) / 100
+)
+
+const scale = computed(() => Math.max(needs.value, resources.value))
+
+const needSegments = computed(() => [
+  { key: 'price', label: 'Prix du bien', value: props.result.maxPrice, color: 'capital', group: 'Finançable par le prêt' },
+  { key: 'agency', label: 'Frais d\'agence', value: props.result.agencyFees, color: 'capital', group: 'Finançable par le prêt' },
+  { key: 'notary', label: `Frais de notaire (${notaryRateLabel.value})`, value: props.result.notaryFees, color: 'apport', group: 'À payer avec l\'apport' }
+])
+
+const resourceSegments = computed(() => [
+  { key: 'loan', label: 'Prêt', value: props.result.loanUsed, color: 'capital' },
+  { key: 'apport', label: 'Apport', value: props.personalContribution, color: 'apport', always: true }
+])
+
+// Tooltip "Prix du bien" : affiche la formule qui a déterminé le résultat
 const priceTooltip = computed(() => {
-  const r = result.value
+  const r = props.result
   const isC2Binding = r.c2 <= r.c1
 
   if (isC2Binding) {
     return {
       principe: 'Limité par l\'apport (frais de notaire)',
-      calcul: `${formatCurrency(personalContribution.value || 0)} ÷ ${notaryRateLabel.value} = ${formatCurrency(r.maxPrice)}`
+      calcul: `${formatCurrency(props.personalContribution)} ÷ ${notaryRateLabel.value} = ${formatCurrency(r.maxPrice)}`
     }
   }
 
-  const c1BaseLabel = `${formatCurrency(props.borrowingCapacity)} + ${formatCurrency(personalContribution.value || 0)}`
+  const c1BaseLabel = `${formatCurrency(props.borrowingCapacity)} + ${formatCurrency(props.personalContribution)}`
   let diviseur
-  if (agencyFeesMode.value === '%' && agencyFees.value) {
-    diviseur = `(1 + ${notaryRateLabel.value} + ${formatPercent(agencyFees.value)})`
+  if (props.agencyFeesMode === '%' && props.agencyFees) {
+    diviseur = `(1 + ${notaryRateLabel.value} + ${formatPercent(props.agencyFees)})`
   } else {
     diviseur = `(1 + ${notaryRateLabel.value})`
   }
-  const budgetDisplay = agencyFeesMode.value === '€' && agencyFees.value
-    ? `(${c1BaseLabel} − ${formatCurrency(agencyFees.value)})`
+  const budgetDisplay = props.agencyFeesMode === '€' && props.agencyFees
+    ? `(${c1BaseLabel} − ${formatCurrency(props.agencyFees)})`
     : c1BaseLabel
 
   return {

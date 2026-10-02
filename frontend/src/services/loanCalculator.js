@@ -149,6 +149,7 @@ export const AGENCY_FEES_MODES = [
  * @returns {{ maxPrice, notaryFees, totalBudget, agencyFees, isApportConstrained, minApportNeeded, c1, c2 }}
  *   c1 / c2 : valeurs des deux contraintes (exposées pour les tooltips)
  *   minApportNeeded : apport à partir duquel toute la capacité d'emprunt est utilisable
+ *   loanUsed / unusedCapacity : part de la capacité réellement empruntée, et le reste
  */
 export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€') {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
@@ -187,7 +188,14 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
   const notaryFees = Math.round(maxPrice * notaryRate * 100) / 100
   const isApportConstrained = personalContribution < minApportNeeded
 
-  return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount, isApportConstrained, minApportNeeded, c1, c2 }
+  // Prêt réellement mobilisé : quand l'apport limite le prix, il ne couvre que les frais de notaire
+  // et le prêt finance exactement le prix FAI. Sinon toute la capacité est utilisée.
+  const loanUsed = isApportConstrained
+    ? Math.round((maxPrice + agencyFeesAmount) * 100) / 100
+    : borrowingCapacity
+  const unusedCapacity = Math.round((borrowingCapacity - loanUsed) * 100) / 100
+
+  return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount, isApportConstrained, minApportNeeded, c1, c2, loanUsed, unusedCapacity }
 }
 
 /**

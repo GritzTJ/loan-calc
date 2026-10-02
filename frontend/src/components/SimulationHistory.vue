@@ -1,83 +1,43 @@
 <template>
-  <div>
-    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Historique des simulations</h2>
+  <section>
+    <h2 class="text-xl font-semibold text-ink">Historique</h2>
 
     <!-- Chargement -->
-    <div v-if="loading" class="text-center py-12 text-gray-400 dark:text-gray-500">
-      Chargement…
-    </div>
+    <p v-if="loading" class="mt-6 text-sm text-ink-3">Chargement…</p>
 
     <!-- Échec du chargement : à ne pas confondre avec une liste vide -->
-    <div v-else-if="loadError" role="alert" class="text-center py-12 text-sm text-red-700 dark:text-red-400">
+    <div v-else-if="loadError" role="alert" class="notice notice-danger mt-6">
       <p>Impossible de charger l'historique. {{ loadError.message }}</p>
-      <a v-if="loadError.status === 401" href="/auth/login" class="inline-block mt-3 underline">Se reconnecter</a>
-      <button v-else type="button" class="mt-3 underline" @click="fetchSimulations">Réessayer</button>
+      <a v-if="loadError.status === 401" href="/auth/login" class="inline-block mt-2 font-medium underline">Se reconnecter</a>
+      <button v-else type="button" class="mt-2 font-medium underline" @click="fetchSimulations">Réessayer</button>
     </div>
 
-    <!-- Liste vide -->
-    <div v-else-if="simulations.length === 0" class="text-center py-12 text-gray-400 dark:text-gray-500">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-      </svg>
-      <p class="text-sm">Aucune simulation enregistrée.</p>
-      <p class="text-xs mt-1">Utilisez le bouton « Enregistrer » dans le simulateur ou la capacité.</p>
+    <!-- Liste vide : dire comment la remplir -->
+    <div v-else-if="simulations.length === 0" class="mt-6 text-sm text-ink-2 max-w-prose">
+      <p class="font-medium text-ink">Aucune simulation enregistrée.</p>
+      <p class="mt-1">Le bouton « Enregistrer » du simulateur et de la capacité d'emprunt conserve une saisie pour la retrouver ici.</p>
     </div>
 
     <!-- Liste des simulations -->
-    <ul v-else class="space-y-2">
-      <li
-        v-for="sim in simulations"
-        :key="sim.id"
-        class="p-4 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-xl transition-colors"
-      >
+    <ul v-else class="mt-5 border border-line rounded-2xl bg-surface divide-y divide-line">
+      <li v-for="sim in simulations" :key="sim.id" class="px-4 py-3 sm:px-5">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 mb-1">
-              <span
-                class="text-xs font-medium px-2 py-0.5 rounded-full"
-                :class="sim.type === 'loan'
-                  ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-                  : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'"
-              >
-                {{ sim.type === 'loan' ? 'Prêt' : 'Capacité' }}
-              </span>
-              <span class="font-medium text-gray-800 dark:text-gray-100 truncate">{{ sim.name }}</span>
-            </div>
-            <p class="text-xs text-gray-400 dark:text-gray-500">
-              {{ formatSimSummary(sim) }} · {{ formatDate(new Date(sim.created_at)) }}
-            </p>
+            <p class="font-medium text-ink truncate">{{ sim.name }}</p>
+            <p class="text-sm text-ink-2">{{ formatSimSummary(sim) }}</p>
+            <p class="text-xs text-ink-3 mt-0.5">Enregistrée le {{ formatDate(new Date(sim.created_at)) }}</p>
           </div>
 
           <!-- Suppression en deux temps : le premier clic demande confirmation dans la ligne -->
-          <div v-if="pendingDeleteId === sim.id" class="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-              @click="pendingDeleteId = null"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
-              @click="onDelete(sim.id)"
-            >
-              Supprimer
-            </button>
+          <div v-if="pendingDeleteId === sim.id" class="flex items-center gap-1 shrink-0">
+            <button type="button" class="btn btn-quiet" @click="pendingDeleteId = null">Annuler</button>
+            <button type="button" class="btn bg-danger text-surface" @click="onDelete(sim.id)">Supprimer</button>
           </div>
-          <div v-else class="flex items-center gap-2 shrink-0">
+          <div v-else class="flex items-center gap-1 shrink-0">
+            <button type="button" class="btn btn-secondary" @click="onLoad(sim)">Ouvrir</button>
             <button
               type="button"
-              class="px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-400
-                     bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800
-                     rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-              @click="onLoad(sim)"
-            >
-              Charger
-            </button>
-            <button
-              type="button"
-              class="p-2.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+              class="btn btn-quiet px-3"
               :aria-label="`Supprimer « ${sim.name} »`"
               @click="askDelete(sim.id)"
             >
@@ -87,18 +47,18 @@
             </button>
           </div>
         </div>
-        <p v-if="deleteError?.id === sim.id" role="alert" class="mt-2 text-xs text-red-700 dark:text-red-400">
+        <p v-if="deleteError?.id === sim.id" role="alert" class="mt-2 text-sm text-danger">
           Suppression impossible. {{ deleteError.message }}
         </p>
       </li>
     </ul>
-  </div>
+  </section>
 </template>
 
 <script setup>
 import { ref, onActivated } from 'vue'
 import { getSimulations, deleteSimulation } from '../services/storageService.js'
-import { formatDate, formatCurrency, formatPercent } from '../services/loanCalculator.js'
+import { formatDate, formatCurrency, formatDuration, formatPercent } from '../services/loanCalculator.js'
 
 const emit = defineEmits(['load'])
 
@@ -128,16 +88,18 @@ onActivated(() => {
   fetchSimulations()
 })
 
+// Une phrase plutôt qu'une suite de valeurs : « Prêt de 200 000 € à 3,5 % sur 20 ans »
 function formatSimSummary(sim) {
   const p = sim.params
+  const duration = formatDuration(p.months)
   if (sim.type === 'loan') {
-    return `${formatCurrency(p.principal)} · ${formatPercent(p.annualRate)} · ${p.months} mois`
+    return `Prêt de ${formatCurrency(p.principal)} à ${formatPercent(p.annualRate)} sur ${duration}`
   }
   // Une capacité est enregistrée soit par revenus, soit par mensualité connue
   if (p.inputMode === 'payment') {
-    return `${formatCurrency(p.directPayment)}/mois · ${p.months} mois`
+    return `Capacité pour ${formatCurrency(p.directPayment)} par mois sur ${duration}`
   }
-  return `${formatCurrency(p.monthlyIncome)}/mois · ${formatPercent(p.debtRatio)} · ${p.months} mois`
+  return `Capacité pour ${formatCurrency(p.monthlyIncome)} de revenus, ${formatPercent(p.debtRatio)} d'endettement, sur ${duration}`
 }
 
 function askDelete(id) {

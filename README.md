@@ -4,7 +4,7 @@ Application web de simulation de prêt immobilier avec cinq modules :
 
 1. **Simulateur de prêt** — Mensualité, tableau d'amortissement, graphique, export Excel
 2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible
-3. **Projet** — Vue d'ensemble d'un projet d'achat immobilier
+3. **Projet** — Montant à emprunter pour un bien donné, plan de financement besoins / ressources
 4. **Comparaison de scénarios** — Deux prêts côte à côte avec tableau comparatif
 5. **Historique** — Sauvegarde, rechargement et suppression des simulations
 
@@ -14,11 +14,12 @@ L'app est installable comme **PWA** sur mobile (Android / iOS) : icône sur l'é
 
 ## Stack technique
 
-- **Frontend** : Vue 3 + Vite + Tailwind CSS + `vite-plugin-pwa` (Workbox)
+- **Frontend** : Vue 3 + Vite + Tailwind CSS + `vite-plugin-pwa` (Workbox), police Archivo auto-hébergée
 - **Backend** : Express 4 + better-sqlite3
 - **Auth** : OIDC Authorization Code + PKCE (Pocket ID / Authentik)
 - **Build** : Docker multi-stage (Node 22 Alpine)
-- **Thème** : clair / sombre / système (toggle dans le header)
+- **Thème** : clair / sombre / système (toggle dans le header) ; couleurs et police définies une seule fois dans `frontend/src/assets/main.css`
+- **Navigation** : barre d'onglets en bas sur téléphone et tablette, onglets dans l'en-tête sur grand écran
 
 ## Prérequis
 
@@ -127,7 +128,8 @@ loan-calc/
 │   └── routes/
 │       └── simulations.js    # CRUD simulations
 └── frontend/
-    ├── public/icons/         # Icônes PWA (svg + png 192/512/maskable/apple)
+    ├── public/icons/         # Icônes PWA (svg + png 192/512/maskable/apple) et splash iOS
+    ├── scripts/              # generate-splash.mjs : régénère icônes et splash depuis favicon.svg
     └── src/
         ├── components/       # Composants Vue (UI)
         ├── composables/      # useTheme, useIsDark

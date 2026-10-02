@@ -1,4 +1,9 @@
-node_modules
+# **/ : le motif doit aussi valoir dans backend/ et frontend/. Sans cela, un build local copie
+# les node_modules de l'hôte (binaire better-sqlite3 compilé pour glibc) par-dessus ceux de l'image Alpine.
+**/node_modules
+**/dist
+backend/data
+backend/public
 .git
 .github
 .env

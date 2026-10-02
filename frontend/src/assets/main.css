@@ -2,14 +2,143 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Archivo variable, sous-ensemble latin uniquement (français + € + espaces fines), auto-hébergé
+   pour être précaché par le service worker. L'axe de largeur (62–125 %) sert aux chiffres condensés. */
+@font-face {
+  font-family: 'Archivo Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url('@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2') format('woff2-variations');
+}
+
 @layer base {
-  /* Uniformise les inputs numériques : masque les spinners */
-  input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
+  /* Jetons de couleur (triplets RGB, consommés par tailwind.config.js).
+     Les quatre couleurs de données sont validées deux à deux pour le daltonisme, dans chaque thème. */
+  :root {
+    --bg: 244 246 247;            /* enduit */
+    --surface: 255 255 255;
+    --sunken: 230 235 238;
+    --line: 205 213 218;
+    --line-field: 133 147 157;    /* bord des champs : 3:1 sur la surface */
+    --ink: 31 42 51;              /* ardoise */
+    --ink-2: 78 93 104;
+    --ink-3: 98 112 122;
+
+    --primary: 22 111 84;         /* vert volet */
+    --primary-ink: 22 111 84;
+    --primary-soft: 226 239 234;
+    --on-primary: 255 255 255;
+
+    --capital: 23 128 95;
+    --interest: 184 125 28;       /* ocre */
+    --insurance: 63 120 181;      /* bleu zinc */
+    --apport: 120 58 120;         /* prune */
+
+    --danger: 179 38 30;
+    --danger-soft: 251 234 232;
+    --warn-ink: 110 71 11;
+    --warn-soft: 250 240 220;
+    --warn-line: 226 190 127;
+
+    color-scheme: light;
   }
-  input[type="number"] {
-    -moz-appearance: textfield;
+
+  .dark {
+    --bg: 20 27 33;
+    --surface: 28 37 45;
+    --sunken: 39 51 61;
+    --line: 54 69 79;
+    --line-field: 110 127 139;
+    --ink: 232 237 240;
+    --ink-2: 179 191 199;
+    --ink-3: 147 161 171;
+
+    --primary: 63 168 134;
+    --primary-ink: 98 199 168;
+    --primary-soft: 28 58 50;
+    --on-primary: 12 27 22;
+
+    --capital: 63 168 134;
+    --interest: 184 132 44;
+    --insurance: 92 143 219;
+    --apport: 170 98 160;
+
+    --danger: 242 134 126;
+    --danger-soft: 58 32 32;
+    --warn-ink: 235 201 135;
+    --warn-soft: 51 41 26;
+    --warn-line: 122 96 48;
+
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+  }
+
+  /* Focus clavier visible partout, jamais au clic */
+  :focus-visible {
+    outline: 2px solid rgb(var(--primary-ink));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Champ de saisie : 16 px minimum, sinon iOS zoome la page au focus */
+  .input-field {
+    @apply w-full h-11 px-3 rounded-lg border border-line-field bg-surface text-base text-ink
+           placeholder:text-ink-3;
+  }
+  .input-field:focus {
+    @apply border-primary-ink;
+    outline: 2px solid rgb(var(--primary-ink));
+    outline-offset: 0;
+  }
+
+  /* Chiffres : largeur condensée, pour qu'un grand montant tienne sur un écran de téléphone.
+     Les chiffres d'Archivo sont tabulaires : les montants ne bougent pas quand ils changent. */
+  .figure {
+    font-stretch: 75%;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 h-11 px-4 rounded-lg text-sm font-medium whitespace-nowrap
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-primary text-on-primary hover:brightness-110;
+  }
+  .btn-secondary {
+    @apply border border-line-field text-ink hover:bg-sunken;
+  }
+  .btn-quiet {
+    @apply text-ink-2 hover:text-ink hover:bg-sunken;
+  }
+
+  /* La feuille de résultat : la seule surface en relief de l'écran */
+  .sheet {
+    @apply bg-surface border border-line rounded-2xl p-5 sm:p-6;
+  }
+
+  .notice {
+    @apply rounded-lg border px-4 py-3 text-sm;
+  }
+  .notice-warn {
+    @apply border-warn-line bg-warn-soft text-warn-ink;
+  }
+  .notice-danger {
+    @apply border-danger/40 bg-danger-soft text-danger;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }

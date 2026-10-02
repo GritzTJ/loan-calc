@@ -1,16 +1,17 @@
 <template>
-  <div role="group" class="flex" :class="size === 'sm' ? 'gap-1' : 'gap-3'">
+  <!-- Un seul bloc à fond creux, l'option active en relief : on lit un choix, pas une rangée de boutons -->
+  <div role="group" class="inline-flex bg-sunken rounded-lg p-0.5" :class="{ 'w-full': size === 'md' }">
     <button
       v-for="option in options"
       :key="option.value"
       type="button"
       :aria-pressed="modelValue === option.value"
-      class="font-medium border transition-colors"
+      class="rounded-md font-medium transition-colors"
       :class="[
-        size === 'sm' ? 'px-2 py-0.5 rounded text-xs' : 'flex-1 py-2 px-4 rounded-lg text-sm',
+        size === 'sm' ? 'px-2.5 h-7 text-xs' : 'flex-1 px-3 h-10 text-sm',
         modelValue === option.value
-          ? 'bg-blue-600 text-white border-blue-600'
-          : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+          ? 'bg-surface text-ink shadow-sm'
+          : 'text-ink-2 hover:text-ink'
       ]"
       @click="emit('update:modelValue', option.value)"
     >

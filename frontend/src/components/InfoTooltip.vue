@@ -7,26 +7,26 @@
   >
     <button
       type="button"
-      class="w-5 h-5 inline-flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 text-[10px] font-bold leading-none select-none
-             focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      class="w-5 h-5 inline-flex items-center justify-center rounded-full border border-line-field text-ink-2 text-[11px] font-semibold leading-none select-none hover:bg-sunken"
       aria-label="Détail du calcul"
       :aria-expanded="visible"
       :aria-describedby="visible ? tooltipId : undefined"
       @click="toggle"
+      @blur="hide"
       @keydown.esc="hide"
     >i</button>
     <span
       v-show="visible"
       :id="tooltipId"
       role="tooltip"
-      class="absolute bottom-full left-1/2 mb-2 w-56 px-3 py-2 text-xs bg-gray-800 dark:bg-gray-700 text-white rounded-lg shadow-xl z-50 normal-case tracking-normal text-left font-normal"
+      class="tooltip-bubble absolute bottom-full left-1/2 mb-2 w-56 px-3 py-2 text-xs rounded-lg shadow-lg z-50 text-left font-normal"
       :style="{ transform: `translateX(calc(-50% + ${shift}px))` }"
     >
-      <span class="block text-gray-200">{{ principe }}</span>
-      <span class="block text-gray-400 mt-0.5">{{ calcul }}</span>
+      <span class="block">{{ principe }}</span>
+      <span class="block opacity-75 mt-0.5 tabular-nums">{{ calcul }}</span>
       <!-- La flèche reste sous le bouton même quand la bulle est recalée -->
       <span
-        class="absolute top-full left-1/2 border-4 border-transparent border-t-gray-800 dark:border-t-gray-700"
+        class="tooltip-arrow absolute top-full left-1/2"
         :style="{ transform: `translateX(calc(-50% - ${shift}px))` }"
       ></span>
     </span>
@@ -89,3 +89,15 @@ watch(visible, (isVisible) => {
 
 onUnmounted(() => document.removeEventListener('pointerdown', onOutsidePointerDown))
 </script>
+
+<style>
+/* Bulle inversée par rapport au thème : encre sur fond clair, fond clair sur encre */
+.tooltip-bubble {
+  background: rgb(var(--ink));
+  color: rgb(var(--bg));
+}
+.tooltip-arrow {
+  border: 4px solid transparent;
+  border-top-color: rgb(var(--ink));
+}
+</style>

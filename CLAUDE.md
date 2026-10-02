@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.5.5**
+Simulateur de prêt immobilier — usage personnel — **v2.6.0**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -106,7 +106,7 @@ Application installable comme **PWA** sur mobile (icône écran d'accueil, plein
 
 | Couche | Techno |
 |--------|--------|
-| Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js |
+| Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js + police Archivo variable auto-hébergée (`@fontsource-variable/archivo`) |
 | Backend | Node.js 22 + Express 4 + SQLite (better-sqlite3) |
 | Build | Docker multi-stage (`node:22-alpine`) |
 | Dev | Vite sur `:5173` proxy `/api/*` et `/auth/*` → Express sur `:3000` |
@@ -127,14 +127,27 @@ frontend/
     services/loanCalculator.js     — toutes les formules financières (+ formatage, bornes de saisie)
     services/loanCalculator.test.js — tests Vitest des formules et des règles métier
     services/storageService.js     — appels API REST (lève une `ApiError` en cas d'échec)
+    assets/main.css                — jetons de couleur clair/sombre, police, classes `.input-field` `.btn` `.sheet` `.figure` `.notice`
     components/                     — un composant Vue par onglet + utilitaires
-      PropertyPrice.vue            — calcul prix max du bien (sous Capacité)
+      CalculatorLayout.vue         — mise en page commune : titre, bandeau de résultat collant, formulaire, feuille de résultat
+      FundingBar.vue               — barre empilée + légende chiffrée (coût du crédit, besoins/ressources)
+      PropertyPrice.vue            — résultat « prix du bien accessible » (sous Capacité ; la saisie est dans BorrowingCapacity)
       FormField.vue                — libellé relié à son champ (`for`/`id` via `useId`)
-      NumberInput.vue              — saisie numérique formatée, bornée (`min`/`max`)
+      NumberInput.vue              — saisie numérique formatée, bornée (`min`/`max`), unité dans le champ (`suffix`)
+      DurationField.vue            — durée saisie en années ou en mois (le modèle reste en mois)
       SegmentedControl.vue         — groupe de boutons à choix unique
       SaveSimulation.vue           — bouton « Enregistrer » + modale `<dialog>` (erreur affichée, pas d'échec silencieux)
       InfoTooltip.vue              — tooltips sur les champs calculés (survol, tap et clavier)
 ```
+
+## Interface (depuis v2.6.0)
+
+- **Une seule source de couleurs** : les variables CSS de `main.css`, exposées à Tailwind par `tailwind.config.js` (`bg-surface`, `text-ink-2`, `bg-capital`…). Ne pas réintroduire de `gray-*`/`blue-*` ni de variantes `dark:` : le thème sombre redéfinit les variables
+- **La couleur a un sens fixe** : `capital` (vert) = l'argent de la banque (capital, prêt, ce que le prêt peut financer) · `interest` (ocre) = intérêts · `insurance` (bleu) = assurance · `apport` (prune) = l'argent personnel (apport, ce qu'il doit payer) · `danger` = manque/erreur, jamais porté par la couleur seule (texte explicite ; dans une barre, hachures + icône + libellé). Ces 4 teintes sont validées deux à deux pour le daltonisme dans les deux thèmes : les re-valider si on les change
+- **Chiffres** : classe `.figure` (Archivo condensé 75 %, graisse 600, tabulaire). Le texte reste en largeur normale. Pas de capitales, pas de `font-mono`
+- **Mise en page** (`CalculatorLayout`) : < `lg` une colonne, bandeau de résultat collant **en haut** (visible au-dessus du clavier), barre d'onglets fixe en bas ; ≥ `lg` formulaire à gauche, feuille de résultat collante à droite, onglets dans l'en-tête
+- **Champs à 16 px minimum** (`.input-field`) : en dessous, iOS zoome la page au focus
+- « Simuler ce prêt » (Capacité, Projet) émet `simulate` → `App.vue` préremplit le Simulateur avec `merge: true` (la saisie non transmise est conservée)
 
 ## Tests
 
@@ -157,12 +170,13 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.5.5)
+- `main` — version stable (v2.6.0)
 
 ## PWA
 
 - `vite-plugin-pwa` (stratégie `generateSW`, `registerType: 'autoUpdate'`) génère `sw.js`, `workbox-*.js` et `manifest.webmanifest`
-- Icônes dans `frontend/public/icons/` (favicon SVG + PNG 192/512/512-maskable + apple-touch-icon 180 + 12 splash screens iOS `splash-WxH.png` générés par `frontend/scripts/generate-splash.mjs`)
+- Icônes dans `frontend/public/icons/` : `favicon.svg` est la source ; les PNG (192/512/512-maskable/apple-touch-icon 180) et les 12 splash screens iOS `splash-WxH.png` sont générés par `frontend/scripts/generate-splash.mjs` (`npm i --no-save sharp` au préalable) et commités
+- `theme-color` = fond de l'app (`#f4f6f7` clair, `#141b21` sombre), resynchronisé par `useTheme.js` quand le thème est forcé
 - Le service worker précache la coquille (HTML/JS/CSS/icônes, hors splash iOS). `/api/*` et `/auth/*` sont **denylistés** → toujours réseau
 - Backend (`backend/index.js`) expose `manifest.webmanifest`, `sw.js`, `workbox-*.js` et `/icons/*` **avant** le guard OIDC (sinon iOS ne peut pas récupérer le SW). `sw.js` est servi en `no-cache`
 - Si `/auth/me` renvoie 401 (session expirée alors que la PWA est ouverte hors session), `App.vue` redirige vers `/auth/login`

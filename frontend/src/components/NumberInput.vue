@@ -1,24 +1,37 @@
 <template>
-  <input
-    ref="inputRef"
-    type="text"
-    inputmode="decimal"
-    :value="displayValue"
-    :placeholder="placeholder"
-    :class="inputClass"
-    @focus="onFocus"
-    @input="onInput"
-    @blur="onBlur"
-  />
+  <div class="relative">
+    <input
+      v-bind="$attrs"
+      type="text"
+      inputmode="decimal"
+      :value="displayValue"
+      :placeholder="placeholder"
+      class="input-field text-right tabular-nums"
+      :class="suffix ? 'pr-14' : ''"
+      @focus="onFocus"
+      @input="onInput"
+      @blur="onBlur"
+    />
+    <!-- L'unité est dans le champ, à droite du nombre : elle ne peut pas être prise pour une partie du libellé -->
+    <span
+      v-if="suffix"
+      class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-3"
+      aria-hidden="true"
+    >{{ suffix }}</span>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 
+// Les attributs (id, aria-*) vont sur l'<input>, pas sur le conteneur
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps({
   modelValue: { type: Number, default: null },
   placeholder: { type: String, default: '' },
-  inputClass: { type: String, default: 'input-field' },
+  // Unité affichée dans le champ (€, %, mois…)
+  suffix: { type: String, default: '' },
   // Nombre de décimales autorisées (0 = entier uniquement)
   decimals: { type: Number, default: 0 },
   // Bornes : toute saisie hors bornes est ramenée à la borne (les montants, taux et durées sont positifs)
@@ -28,7 +41,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-const inputRef = ref(null)
 const isFocused = ref(false)
 // Valeur brute affichée pendant la saisie (non reformatée)
 const rawInput = ref('')
@@ -83,8 +95,13 @@ function onInput(event) {
       ? Math.round(parsed * Math.pow(10, props.decimals)) / Math.pow(10, props.decimals)
       : Math.round(parsed)
     const clamped = clamp(rounded)
-    // Hors bornes : le champ montre tout de suite la valeur retenue, pas celle tapée
-    if (clamped !== rounded) rawInput.value = toRawInput(clamped)
+    // Hors bornes : le champ montre tout de suite la valeur retenue, pas celle tapée.
+    // On écrit aussi directement dans le champ : si la valeur retenue est celle d'avant la frappe
+    // (« 600 » puis « 0 » avec un maximum de 600), rien ne change côté Vue et il n'y aurait pas de nouveau rendu.
+    if (clamped !== rounded) {
+      rawInput.value = toRawInput(clamped)
+      event.target.value = rawInput.value
+    }
     emit('update:modelValue', clamped)
   } else if (event.target.value === '' || event.target.value === '-') {
     emit('update:modelValue', null)

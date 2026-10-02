@@ -1,87 +1,87 @@
 <template>
-  <div>
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">Simulateur de prêt</h2>
-      <SaveSimulation v-if="isValid" placeholder="Ex : Appart Lyon - 20 ans" :save="onSave" />
-    </div>
+  <CalculatorLayout
+    title="Simulateur de prêt"
+    :ready="isValid"
+    empty-hint="Saisissez un montant, un taux et une durée pour obtenir la mensualité."
+  >
+    <template #summary>
+      <div class="flex items-baseline justify-between gap-3">
+        <span class="text-sm text-ink-2">{{ monthlyLabel }}</span>
+        <span class="figure text-lg text-ink">{{ formatCurrency(monthlyTotal) }}</span>
+      </div>
+    </template>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <FormField v-slot="{ id }" label="Montant emprunté (€)">
-        <NumberInput :id="id" v-model="principal" placeholder="200 000" />
+    <template #form>
+      <FormField v-slot="{ id }" label="Montant emprunté">
+        <NumberInput :id="id" v-model="principal" suffix="€" placeholder="200 000" />
       </FormField>
 
-      <FormField v-slot="{ id }" label="Taux annuel (%)">
-        <NumberInput :id="id" v-model="annualRate" :decimals="2" :max="MAX_RATE" placeholder="3,50" />
+      <FormField v-slot="{ id }" label="Taux annuel">
+        <NumberInput :id="id" v-model="annualRate" :decimals="2" :max="MAX_RATE" suffix="%" placeholder="3,50" />
       </FormField>
 
-      <FormField label="Nombre de mensualités">
-        <template #default="{ id }">
-          <NumberInput :id="id" v-model="months" :max="MAX_LOAN_MONTHS" placeholder="240" />
-        </template>
-        <template v-if="months" #help>= {{ formatDuration(months) }}</template>
-      </FormField>
+      <DurationField v-model="months" />
 
       <FormField label="Date de début">
         <template #default="{ id }">
           <input :id="id" v-model="startDateStr" type="date" class="input-field" />
         </template>
-        <template #help>1re mensualité le {{ firstPaymentLabel }}</template>
+        <template #help>Première mensualité le {{ firstPaymentLabel }}</template>
       </FormField>
 
-      <FormField v-slot="{ id }" label="Taux assurance (%/an)" hint="(optionnel)">
-        <NumberInput :id="id" v-model="insuranceRate" :decimals="2" :max="MAX_RATE" placeholder="0,30" />
+      <FormField v-slot="{ id }" label="Taux d'assurance" hint="(optionnel)">
+        <NumberInput :id="id" v-model="insuranceRate" :decimals="2" :max="MAX_RATE" suffix="% / an" placeholder="0,30" />
       </FormField>
 
-      <FormField v-slot="{ id }" label="Frais de dossier (€)" hint="(optionnel)">
-        <NumberInput :id="id" v-model="applicationFees" placeholder="0" />
+      <FormField v-slot="{ id }" label="Frais de dossier" hint="(optionnel)">
+        <NumberInput :id="id" v-model="applicationFees" suffix="€" placeholder="0" />
       </FormField>
-    </div>
+    </template>
 
-    <!-- Résultat mensualité -->
-    <div v-if="isValid" class="mt-6 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-5 transition-colors">
-      <div class="text-center">
-        <div class="flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          Mensualité crédit
-          <InfoTooltip
-            principe="Amortissement à taux fixe sur la durée"
-            :calcul="`${formatCurrency(principal)} à ${formatPercent(annualRate)} sur ${months} mois`"
-          />
-        </div>
-        <div class="text-3xl font-bold text-blue-700 dark:text-blue-400 mt-1">
-          {{ formatCurrency(monthlyPayment) }}
-        </div>
+    <template #result>
+      <p class="flex items-center text-sm text-ink-2">
+        {{ monthlyLabel }}
+        <InfoTooltip
+          principe="Amortissement à taux fixe sur la durée"
+          :calcul="`${formatCurrency(principal)} à ${formatPercent(annualRate)} sur ${months} mois`"
+        />
+      </p>
+      <p class="figure text-hero text-ink mt-1.5">{{ formatCurrency(monthlyTotal) }}</p>
+      <p v-if="monthlyInsurance > 0" class="mt-2 text-sm text-ink-2">
+        dont <span class="figure text-ink">{{ formatCurrency(monthlyPayment) }}</span> de crédit
+        et <span class="figure text-ink">{{ formatCurrency(monthlyInsurance) }}</span> d'assurance
+      </p>
+      <p class="mt-1 text-sm text-ink-3">
+        Pendant {{ formatDuration(months) }}, à partir du {{ firstPaymentLabel }}
+      </p>
+      <div class="mt-4">
+        <SaveSimulation placeholder="Ex : Appart Lyon - 20 ans" :save="onSave" />
       </div>
-      <!-- Assurance -->
-      <div v-if="monthlyInsurance > 0" class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700 flex justify-between text-sm">
-        <span class="text-gray-500 dark:text-gray-400 inline-flex items-center">
-          + Assurance / mois
-          <InfoTooltip
-            principe="Cotisation assurance emprunteur mensuelle"
-            :calcul="`${formatCurrency(principal)} × ${formatPercent(insuranceRate)} / 12`"
-          />
-        </span>
-        <span class="font-semibold text-gray-700 dark:text-gray-300">{{ formatCurrency(monthlyInsurance) }}</span>
-      </div>
-      <div v-if="monthlyInsurance > 0" class="mt-2 flex justify-between text-sm font-bold">
-        <span class="text-gray-700 dark:text-gray-200 inline-flex items-center">
-          = Mensualité totale
-          <InfoTooltip
-            principe="Charge mensuelle totale due à la banque"
-            :calcul="`${formatCurrency(monthlyPayment)} + ${formatCurrency(monthlyInsurance)}`"
-          />
-        </span>
-        <span class="text-blue-700 dark:text-blue-400">{{ formatCurrency(monthlyPayment + monthlyInsurance) }}</span>
-      </div>
-    </div>
 
-    <!-- Tableau d'amortissement -->
-    <AmortizationTable
-      v-if="isValid"
-      :rows="amortizationTable"
-      :monthly-insurance="monthlyInsurance"
-      :application-fees="applicationFees || 0"
-    />
-  </div>
+      <FundingBar class="mt-6" title="Total des mensualités" :total="totalPayments" :segments="costSegments">
+        <template #after>
+          <li v-if="applicationFees > 0" class="flex items-baseline justify-between gap-3 text-sm">
+            <span class="text-ink-2 pl-[1.125rem]">Frais de dossier</span>
+            <span class="figure text-ink">{{ formatCurrency(applicationFees) }}</span>
+          </li>
+          <li class="flex items-baseline justify-between gap-3 text-sm pt-2 mt-2 border-t border-line">
+            <span class="flex items-center font-medium text-ink">
+              Coût du crédit
+              <InfoTooltip
+                principe="Tout ce que le prêt coûte en plus du capital"
+                :calcul="creditCostFormula"
+              />
+            </span>
+            <span class="figure text-base text-ink">{{ formatCurrency(creditCost) }}</span>
+          </li>
+        </template>
+      </FundingBar>
+    </template>
+
+    <template #below>
+      <AmortizationTable v-if="isValid" :rows="amortizationTable" />
+    </template>
+  </CalculatorLayout>
 </template>
 
 <script setup>
@@ -95,17 +95,19 @@ import {
   formatDate,
   formatDuration,
   formatPercent,
-  MAX_LOAN_MONTHS,
   MAX_RATE
 } from '../services/loanCalculator.js'
 import { saveSimulation } from '../services/storageService.js'
 import AmortizationTable from './AmortizationTable.vue'
+import CalculatorLayout from './CalculatorLayout.vue'
+import DurationField from './DurationField.vue'
 import FormField from './FormField.vue'
+import FundingBar from './FundingBar.vue'
 import NumberInput from './NumberInput.vue'
 import InfoTooltip from './InfoTooltip.vue'
 import SaveSimulation from './SaveSimulation.vue'
 
-// Permet de charger une simulation depuis l'historique
+// Préremplissage depuis l'historique, ou depuis « Simuler ce prêt » (Capacité, Projet)
 const props = defineProps({
   loadParams: { type: Object, default: null }
 })
@@ -123,14 +125,17 @@ const startDateStr = ref(
   `${defaultDate.getFullYear()}-${String(defaultDate.getMonth() + 1).padStart(2, '0')}-01`
 )
 
-// Quand loadParams change (chargement depuis l'historique), préremplir les champs
 watch(() => props.loadParams, (p) => {
   if (!p) return
   principal.value = p.principal ?? principal.value
   annualRate.value = p.annualRate ?? annualRate.value
   months.value = p.months ?? months.value
-  insuranceRate.value = p.insuranceRate ?? null
-  applicationFees.value = p.applicationFees ?? null
+  // Une simulation de l'historique remplace tout (un champ absent est vidé).
+  // « Simuler ce prêt » (merge) ne transmet que ce qu'il connaît : un champ transmis est repris tel quel,
+  // même vide (Capacité sans assurance → pas d'assurance ici), un champ non transmis garde la saisie en cours.
+  const loaded = (key, current) => (key in p ? p[key] : (p.merge ? current : null))
+  insuranceRate.value = loaded('insuranceRate', insuranceRate.value)
+  applicationFees.value = loaded('applicationFees', applicationFees.value)
   if (p.startDate) startDateStr.value = p.startDate
 }, { immediate: true })
 
@@ -158,9 +163,47 @@ const monthlyInsurance = computed(() =>
   calculateInsuranceCost(principal.value, insuranceRate.value)
 )
 
+// Ce qui sort du compte chaque mois : crédit + assurance
+const monthlyTotal = computed(() =>
+  Math.round((monthlyPayment.value + monthlyInsurance.value) * 100) / 100
+)
+
+const monthlyLabel = computed(() =>
+  monthlyInsurance.value > 0 ? 'Mensualité, assurance comprise' : 'Mensualité'
+)
+
 const amortizationTable = computed(() =>
   generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value)
 )
+
+const totalInterest = computed(() =>
+  Math.round(amortizationTable.value.reduce((sum, row) => sum + row.interestPart, 0) * 100) / 100
+)
+
+const totalInsurance = computed(() =>
+  Math.round(monthlyInsurance.value * amortizationTable.value.length * 100) / 100
+)
+
+const totalPayments = computed(() =>
+  Math.round((principal.value + totalInterest.value + totalInsurance.value) * 100) / 100
+)
+
+const creditCost = computed(() =>
+  Math.round((totalInterest.value + totalInsurance.value + (applicationFees.value || 0)) * 100) / 100
+)
+
+const costSegments = computed(() => [
+  { key: 'capital', label: 'Capital emprunté', value: principal.value || 0, color: 'capital' },
+  { key: 'interest', label: 'Intérêts', value: totalInterest.value, color: 'interest', always: true },
+  { key: 'insurance', label: 'Assurance', value: totalInsurance.value, color: 'insurance' }
+])
+
+const creditCostFormula = computed(() => {
+  const parts = [`${formatCurrency(totalInterest.value)} d'intérêts`]
+  if (totalInsurance.value > 0) parts.push(`${formatCurrency(totalInsurance.value)} d'assurance`)
+  if (applicationFees.value > 0) parts.push(`${formatCurrency(applicationFees.value)} de frais de dossier`)
+  return parts.join(' + ')
+})
 
 // --- Actions ---
 // Lève une erreur en cas d'échec : SaveSimulation l'affiche et garde la modale ouverte

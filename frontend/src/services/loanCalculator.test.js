@@ -125,6 +125,21 @@ describe('calculateMaxPropertyPrice', () => {
     expect(calculateMaxPropertyPrice(200000, 16000, 'ancien').isApportConstrained).toBe(false)
   })
 
+  // Quand l'apport limite le prix, le prêt ne finance que le prix FAI : le reste de la capacité est inutilisé
+  it('indique le prêt réellement utilisé et la capacité restante', () => {
+    const byBudget = calculateMaxPropertyPrice(200000, 50000, 'ancien')
+    expect(byBudget.loanUsed).toBe(200000)
+    expect(byBudget.unusedCapacity).toBe(0)
+
+    const byApport = calculateMaxPropertyPrice(200000, 8000, 'ancien')
+    expect(byApport.loanUsed).toBe(100000)
+    expect(byApport.unusedCapacity).toBe(100000)
+
+    const withAgency = calculateMaxPropertyPrice(200000, 8000, 'ancien', 5, '%')
+    expect(withAgency.loanUsed).toBe(105000) // prix 100 000 + agence 5 000
+    expect(withAgency.unusedCapacity).toBe(95000)
+  })
+
   it('tient compte des frais d\'agence dans l\'apport nécessaire', () => {
     expect(calculateMaxPropertyPrice(200000, 0, 'ancien', 10000, '€').minApportNeeded).toBe(15200)
     expect(calculateMaxPropertyPrice(200000, 0, 'ancien', 5, '%').minApportNeeded).toBe(15238.1)

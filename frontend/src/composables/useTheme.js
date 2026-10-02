@@ -7,9 +7,17 @@ function getSystemPreference() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+// Fond de l'app dans chaque thème (--bg dans main.css) : sert de couleur à la barre système
+const THEME_COLORS = { light: '#f4f6f7', dark: '#141b21' }
+
 function applyTheme() {
   const effectiveTheme = mode.value === 'system' ? getSystemPreference() : mode.value
   document.documentElement.classList.toggle('dark', effectiveTheme === 'dark')
+  // Les balises theme-color de index.html suivent le thème système ; on les aligne
+  // sur le thème réellement affiché quand l'utilisateur en force un autre.
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute('content', THEME_COLORS[effectiveTheme])
+  })
 }
 
 // Écoute les changements de préférence système

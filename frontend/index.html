@@ -3,16 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Simulateur de Prêt Immobilier</title>
+    <title>Prêt immobilier</title>
 
     <!-- PWA -->
     <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)" />
+    <!-- Couleur de la barre système = fond de l'app (useTheme.js la resynchronise si le thème est forcé) -->
+    <meta name="theme-color" content="#f4f6f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141b21" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Loan Calc" />
+    <meta name="apple-mobile-web-app-title" content="Prêt immo" />
 
     <!-- Splash screens iOS : un PNG par taille d'écran (sinon Safari affiche un écran blanc 1-2 s) -->
     <link rel="apple-touch-startup-image" href="/icons/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
@@ -39,7 +40,7 @@
       })()
     </script>
   </head>
-  <body class="bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors">
+  <body class="min-h-screen">
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
