@@ -22,7 +22,10 @@ const app = express()
 // Nécessaire : Traefik termine TLS, Express reçoit HTTP derrière le reverse proxy
 app.set('trust proxy', 1)
 
-app.use(express.json())
+// inflate: false — un corps compressé (Content-Encoding) est refusé en 415 sans être décompressé.
+// Ce parseur tourne avant le guard d'authentification et le frontend n'envoie que du JSON brut :
+// inutile d'exposer la décompression à des clients anonymes (cf. Node2Shell, CVE-2026-111497).
+app.use(express.json({ inflate: false }))
 app.use(sessionMiddleware(db))
 
 // Rate limit sur les endpoints OIDC : protection minimale contre les abus.
@@ -63,6 +66,10 @@ app.use(requireAuth)
 
 // API REST
 app.use('/api/simulations', simulationsRouter)
+// Route d'API inconnue : 404 JSON (sans cela, le fallback SPA répondrait index.html en 200)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' })
+})
 
 // Frontend statique (build Vue)
 app.use(express.static(publicDir))
@@ -72,6 +79,22 @@ app.get('*', (req, res) => {
   res.sendFile(join(publicDir, 'index.html'))
 })
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`loan-calc server running on port ${PORT}`)
 })
+
+// Arrêt propre. Dans le conteneur, Node est le PID 1 : sans handler, SIGTERM est ignoré
+// et `docker stop` attend 10 s avant de tuer le process, base SQLite encore ouverte.
+function shutdown(signal) {
+  console.log(`[shutdown] ${signal} reçu, arrêt du serveur`)
+  // Le timer de purge des sessions empêcherait la sortie naturelle : on sort explicitement,
+  // une fois les requêtes en cours terminées et la base fermée (checkpoint du WAL).
+  server.close(() => {
+    db.close()
+    process.exit(0)
+  })
+  // Les connexions keep-alive inactives (Traefik) retarderaient la fermeture
+  server.closeIdleConnections()
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

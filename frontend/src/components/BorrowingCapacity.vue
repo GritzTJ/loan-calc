@@ -134,6 +134,7 @@ import {
   calculateMaxPropertyPrice,
   formatCurrency,
   formatPercent,
+  sanitizeMonths,
   MAX_RATE,
   AGENCY_FEES_MODES,
   PROPERTY_TYPES
@@ -203,7 +204,7 @@ watch(() => props.loadParams, (p) => {
   monthlyCharges.value = p.monthlyCharges ?? DEFAULTS.monthlyCharges
   debtRatio.value = p.debtRatio ?? DEFAULTS.debtRatio
   directPayment.value = p.directPayment ?? DEFAULTS.directPayment
-  months.value = p.months ?? DEFAULTS.months
+  months.value = sanitizeMonths(p.months) ?? DEFAULTS.months
   annualRate.value = p.annualRate ?? DEFAULTS.annualRate
   insuranceRate.value = p.insuranceRate ?? null
   // Le bien visé n'est enregistré que depuis la v2.6.0 : une simulation plus ancienne ne le connaît pas

@@ -8,7 +8,9 @@ import {
   calculateLoanAmount,
   calculateInsuranceCost,
   formatDuration,
-  formatPercent
+  formatPercent,
+  sanitizeMonths,
+  MAX_LOAN_MONTHS
 } from './loanCalculator.js'
 
 describe('calculateMonthlyPayment', () => {
@@ -23,6 +25,30 @@ describe('calculateMonthlyPayment', () => {
   it('renvoie 0 pour un montant ou une durée invalides', () => {
     expect(calculateMonthlyPayment(0, 3.5, 240)).toBe(0)
     expect(calculateMonthlyPayment(200000, 3.5, 0)).toBe(0)
+  })
+
+  it('renvoie 0 tant que le taux n\'est pas un nombre (champ vide)', () => {
+    expect(calculateMonthlyPayment(200000, null, 240)).toBe(0)
+    expect(calculateMonthlyPayment(200000, undefined, 240)).toBe(0)
+    expect(generateAmortizationTable(200000, null, 240, new Date(2026, 9, 2))).toEqual([])
+  })
+})
+
+describe('sanitizeMonths', () => {
+  it('conserve une durée valide', () => {
+    expect(sanitizeMonths(240)).toBe(240)
+  })
+
+  it('borne une durée aberrante et arrondit au mois', () => {
+    expect(sanitizeMonths(1e9)).toBe(MAX_LOAN_MONTHS)
+    expect(sanitizeMonths(-5)).toBe(0)
+    expect(sanitizeMonths(12.4)).toBe(12)
+  })
+
+  it('renvoie null pour ce qui n\'est pas un nombre', () => {
+    expect(sanitizeMonths(null)).toBe(null)
+    expect(sanitizeMonths('240')).toBe(null)
+    expect(sanitizeMonths(NaN)).toBe(null)
   })
 })
 

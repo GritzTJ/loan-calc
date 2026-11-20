@@ -95,6 +95,7 @@ import {
   formatDate,
   formatDuration,
   formatPercent,
+  sanitizeMonths,
   MAX_RATE
 } from '../services/loanCalculator.js'
 import { saveSimulation } from '../services/storageService.js'
@@ -129,7 +130,8 @@ watch(() => props.loadParams, (p) => {
   if (!p) return
   principal.value = p.principal ?? principal.value
   annualRate.value = p.annualRate ?? annualRate.value
-  months.value = p.months ?? months.value
+  // Durée re-bornée : une valeur aberrante en base générerait un tableau d'amortissement démesuré
+  months.value = sanitizeMonths(p.months) ?? months.value
   // Une simulation de l'historique remplace tout (un champ absent est vidé).
   // « Simuler ce prêt » (merge) ne transmet que ce qu'il connaît : un champ transmis est repris tel quel,
   // même vide (Capacité sans assurance → pas d'assurance ici), un champ non transmis garde la saisie en cours.

@@ -13,6 +13,8 @@
  */
 export function calculateMonthlyPayment(principal, annualRate, months) {
   if (principal <= 0 || months <= 0) return 0
+  // Taux pas encore saisi (null) : pas de mensualité, plutôt qu'un NaN qui se propagerait au tableau
+  if (!Number.isFinite(annualRate)) return 0
   if (annualRate === 0) return Math.round(principal / months * 100) / 100
 
   const monthlyRate = annualRate / 100 / 12
@@ -97,7 +99,7 @@ export function calculateMaxMonthlyPayment(monthlyIncome, monthlyCharges, debtRa
  * @returns {number} Capital empruntable (€)
  */
 export function calculateBorrowingCapacity(monthlyPayment, annualRate, months, insuranceRate = 0) {
-  if (monthlyPayment <= 0 || months <= 0) return 0
+  if (monthlyPayment <= 0 || months <= 0 || !Number.isFinite(annualRate)) return 0
 
   const monthlyRate = annualRate / 100 / 12
   const paymentPerEuro = annualRate === 0
@@ -113,6 +115,17 @@ export function calculateBorrowingCapacity(monthlyPayment, annualRate, months, i
 // génère un tableau d'amortissement de centaines de milliers de lignes et fige le navigateur.
 export const MAX_LOAN_MONTHS = 600 // 50 ans
 export const MAX_RATE = 100        // %
+
+/**
+ * Ramène une durée venue d'ailleurs que du formulaire (simulation de l'historique) dans les bornes
+ * de saisie : le champ durée ne borne que ce qui est tapé, pas ce qui est chargé.
+ * @param {*} months
+ * @returns {number|null} Nombre entier de mois entre 0 et MAX_LOAN_MONTHS, ou null si ce n'est pas un nombre
+ */
+export function sanitizeMonths(months) {
+  if (typeof months !== 'number' || !Number.isFinite(months)) return null
+  return Math.min(MAX_LOAN_MONTHS, Math.max(0, Math.round(months)))
+}
 
 // Taux de frais de notaire selon le type de bien
 export const NOTARY_FEES = {

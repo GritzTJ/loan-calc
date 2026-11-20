@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.6.1**
+Simulateur de prêt immobilier — usage personnel — **v2.6.2**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -108,7 +108,7 @@ Application installable comme **PWA** sur mobile (icône écran d'accueil, plein
 |--------|--------|
 | Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js + police Archivo variable auto-hébergée (`@fontsource-variable/archivo`) |
 | Backend | Node.js 22 + Express 4 + SQLite (better-sqlite3) |
-| Build | Docker multi-stage (`node:22-alpine`) |
+| Build | Docker multi-stage (`node:22.23.5-alpine`, version épinglée) |
 | Dev | Vite sur `:5173` proxy `/api/*` et `/auth/*` → Express sur `:3000` |
 
 ## Fichiers clés
@@ -170,7 +170,7 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.6.1)
+- `main` — version stable (v2.6.2)
 
 ## PWA
 
@@ -192,10 +192,18 @@ frontend/
 - `session.regenerate()` au callback (nouvel identifiant de session à l'authentification)
 - Échec du callback → page d'erreur avec lien « Réessayer » (pas de redirection automatique vers `/auth/login`, qui bouclerait)
 - L'image Docker fixe `NODE_ENV=production` (pas de stack trace dans les réponses d'erreur)
+- `express.json({ inflate: false })` : les corps compressés sont refusés (415), le parseur tournant avant le guard
 - Rate limit 10 req/min/IP sur `/auth/login` et `/auth/callback` (`express-rate-limit`)
 - Fallback `userinfo` → ID token claims (compatibilité Pocket ID)
 - `app.set('trust proxy', 1)` obligatoire (Traefik termine TLS, Express reçoit HTTP)
 - Provider supportés : **Authentik** (`OIDC_ISSUER` = `.../application/o/loan-calc/`) ou **Pocket ID** (`OIDC_ISSUER` = racine du domaine)
+
+## Version de Node
+
+- Épinglée au patch près à **trois endroits à garder alignés** : les deux `FROM` du `Dockerfile` et `node-version` du workflow. Plancher dans `backend/package.json` (`engines`)
+- Minimum **22.23.4** (correctif Node2Shell, CVE-2026-111497 — décodeur Brotli de Node). Un correctif de sécurité Node n'arrive en production qu'en relevant ces versions puis en poussant un tag
+- `xlsx` vient de la distribution officielle SheetJS (`cdn.sheetjs.com`), pas de npm où la version est figée en 0.18.5 vulnérable
+- `npm audit` frontend : il reste 4 alertes modérées (`glob`/`minimatch` via `workbox-build`), outillage de build uniquement, sans correctif tant que `vite-plugin-pwa` ne monte pas `workbox-build`
 
 ## CI/CD
 

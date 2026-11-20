@@ -1,5 +1,7 @@
+# Version de Node épinglée (et non `22-alpine`) : l'image livrée ne dépend pas du jour du build.
+# Minimum 22.23.4, qui corrige Node2Shell (CVE-2026-111497, décodeur Brotli). À relever à chaque release.
 # Stage 1 : build de l'application Vue
-FROM node:22-alpine AS build
+FROM node:22.23.5-alpine AS build
 WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
@@ -7,7 +9,7 @@ COPY frontend/ .
 RUN npm run build
 
 # Stage 2 : serveur Express (API + fichiers statiques)
-FROM node:22-alpine
+FROM node:22.23.5-alpine
 WORKDIR /usr/src/app
 # Express en mode production : pas de stack trace dans les réponses d'erreur
 ENV NODE_ENV=production

@@ -71,3 +71,15 @@ test('DELETE supprime puis répond 404', async () => {
   assert.equal((await fetch(`${baseUrl}/${sim.id}`, { method: 'DELETE' })).status, 204)
   assert.equal((await fetch(`${baseUrl}/${sim.id}`, { method: 'DELETE' })).status, 404)
 })
+
+test('GET ignore une ligne dont les params sont illisibles au lieu d\'échouer', async () => {
+  const { default: db } = await import('../db.js')
+  db.prepare('INSERT INTO simulations (name, type, params) VALUES (?, ?, ?)').run('corrompue', 'loan', '{pas du json')
+  await post({ name: 'saine', type: 'loan', params: loanParams })
+
+  const res = await fetch(baseUrl)
+  assert.equal(res.status, 200)
+  const names = (await res.json()).map(sim => sim.name)
+  assert.ok(names.includes('saine'))
+  assert.ok(!names.includes('corrompue'))
+})

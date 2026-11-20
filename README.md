@@ -17,7 +17,7 @@ L'app est installable comme **PWA** sur mobile (Android / iOS) : icône sur l'é
 - **Frontend** : Vue 3 + Vite + Tailwind CSS + `vite-plugin-pwa` (Workbox), police Archivo auto-hébergée
 - **Backend** : Express 4 + better-sqlite3
 - **Auth** : OIDC Authorization Code + PKCE (Pocket ID / Authentik)
-- **Build** : Docker multi-stage (Node 22 Alpine)
+- **Build** : Docker multi-stage (`node:22.23.5-alpine`, version épinglée)
 - **Thème** : clair / sombre / système (toggle dans le header) ; couleurs et police définies une seule fois dans `frontend/src/assets/main.css`
 - **Navigation** : barre d'onglets en bas sur téléphone et tablette, onglets dans l'en-tête sur grand écran
 
@@ -51,6 +51,12 @@ docker compose up -d --build
 ```
 
 L'application est accessible via Traefik sur `https://loan-calc.domaine.fr`.
+
+## Mises à jour de sécurité de Node
+
+La version de Node est épinglée dans le `Dockerfile` (deux `FROM`) et dans le workflow GitHub Actions. Pour appliquer un correctif de sécurité Node : relever ces versions, pousser un tag, puis `docker compose pull && docker compose up -d`. Vérification : `docker exec loan-calc node -v`.
+
+Version minimale : **22.23.4** (correctif Node2Shell, CVE-2026-111497).
 
 ## CI/CD
 

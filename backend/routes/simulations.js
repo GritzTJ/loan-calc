@@ -16,8 +16,16 @@ router.get('/', (req, res) => {
     `SELECT ${COLUMNS} FROM simulations ORDER BY created_at DESC, id DESC`
   ).all()
 
-  // Désérialise le JSON des params
-  const simulations = rows.map(r => ({ ...r, params: JSON.parse(r.params) }))
+  // Désérialise le JSON des params. Une ligne illisible (base modifiée à la main, écriture tronquée)
+  // est ignorée et journalisée : elle ne doit pas rendre tout l'historique inaccessible.
+  const simulations = []
+  for (const row of rows) {
+    try {
+      simulations.push({ ...row, params: JSON.parse(row.params) })
+    } catch {
+      console.error(`[simulations] params illisibles pour la simulation ${row.id}, ligne ignorée`)
+    }
+  }
   res.json(simulations)
 })
 
