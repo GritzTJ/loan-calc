@@ -29,7 +29,7 @@
 
           <DurationField v-model="s.months" />
 
-          <InsuranceField v-model:rate="s.insuranceRate" v-model:mode="s.insuranceMode" compact />
+          <InsuranceField v-model:rate="s.insuranceRate" v-model:mode="s.insuranceMode" v-model:quota="s.insuranceQuota" compact />
         </fieldset>
       </div>
     </template>
@@ -101,8 +101,8 @@ import NumberInput from './NumberInput.vue'
 // Deux scénarios d'exemple pour la prise en main, puis saisie conservée d'une visite à l'autre
 const { state, reset } = usePersistedState('comparison', {
   scenarios: [
-    { principal: 200000, annualRate: 3.5, months: 240, insuranceRate: null, insuranceMode: 'initial' },
-    { principal: 200000, annualRate: 3.8, months: 300, insuranceRate: null, insuranceMode: 'initial' }
+    { principal: 200000, annualRate: 3.5, months: 240, insuranceRate: null, insuranceMode: 'initial', insuranceQuota: 100 },
+    { principal: 200000, annualRate: 3.8, months: 300, insuranceRate: null, insuranceMode: 'initial', insuranceQuota: 100 }
   ]
 })
 const { scenarios } = toRefs(state)
@@ -117,7 +117,8 @@ const bothValid = computed(() => scenarios.value.every(isValidScenario))
 const results = computed(() => scenarios.value.map(s => {
   const table = generateAmortizationTable(s.principal, s.annualRate, s.months, new Date(), {
     insuranceRate: s.insuranceRate,
-    insuranceMode: s.insuranceMode
+    insuranceMode: s.insuranceMode,
+    insuranceQuota: s.insuranceQuota
   })
   const sum = (key) => Math.round(table.reduce((total, row) => total + row[key], 0) * 100) / 100
   const totalInterest = sum('interestPart')

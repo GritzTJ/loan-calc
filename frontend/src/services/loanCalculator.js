@@ -31,6 +31,18 @@ export const INSURANCE_MODES = [
 ]
 
 /**
+ * Taux d'assurance réellement payé : le taux du contrat appliqué à la quotité assurée.
+ * La quotité vaut 100 % pour un emprunteur seul ; à deux, chacun est couvert sur une part du prêt
+ * et le total va de 100 % (50/50) à 200 % (chacun couvert sur la totalité).
+ * @param {number} insuranceRate - Taux annuel du contrat (%)
+ * @param {number} [quota] - Quotité assurée (%), 100 par défaut
+ * @returns {number} Taux annuel effectif (%)
+ */
+export function effectiveInsuranceRate(insuranceRate, quota) {
+  return (insuranceRate || 0) * (quota ?? 100) / 100
+}
+
+/**
  * Génère le tableau d'amortissement complet.
  * La 1re mensualité tombe le 1er du mois suivant la date de début.
  *
@@ -42,7 +54,7 @@ export const INSURANCE_MODES = [
  * @param {number} annualRate - Taux annuel (%)
  * @param {number} months - Nombre de mensualités
  * @param {Date} startDate - Date de début du prêt
- * @param {{ insuranceRate?: number, insuranceMode?: 'initial'|'crd' }} [insurance] - Assurance emprunteur
+ * @param {{ insuranceRate?: number, insuranceMode?: 'initial'|'crd', insuranceQuota?: number }} [insurance] - Assurance emprunteur
  * @returns {Array<Object>} Lignes { number, date, remainingPrincipal, principalPart, interestPart,
  *   payment (crédit seul), insurancePart, totalPayment (crédit + assurance) }
  */
@@ -51,7 +63,7 @@ export function generateAmortizationTable(principal, annualRate, months, startDa
   if (monthlyPayment === 0) return []
 
   const monthlyRate = annualRate / 100 / 12
-  const insuranceMonthlyRate = (insurance.insuranceRate || 0) / 100 / 12
+  const insuranceMonthlyRate = effectiveInsuranceRate(insurance.insuranceRate, insurance.insuranceQuota) / 100 / 12
   const insuranceOnRemaining = insurance.insuranceMode === 'crd'
   let remainingPrincipal = Math.round(principal * 100) / 100
   const table = []
@@ -112,6 +124,37 @@ export function summarizeByYear(rows) {
   }
   const round = (x) => Math.round(x * 100) / 100
   return years.map(y => ({ ...y, principal: round(y.principal), interest: round(y.interest), insurance: round(y.insurance), total: round(y.total) }))
+}
+
+/**
+ * TAEG (taux annuel effectif global) : le taux qui égalise ce que l'emprunteur reçoit réellement
+ * (capital moins les frais payés au départ) et la valeur actualisée de tout ce qu'il verse ensuite
+ * (mensualités de crédit et d'assurance). Méthode actuarielle réglementaire : taux mensuel i résolu
+ * par dichotomie, puis annualisé par (1 + i)^12 − 1.
+ *
+ * @param {number} principal - Capital emprunté (€)
+ * @param {number} upfrontFees - Frais payés au départ : dossier, garantie (€)
+ * @param {number[]} payments - Versement de chaque mois, assurance comprise (€)
+ * @returns {number|null} TAEG en %, arrondi à 2 décimales ; null s'il n'est pas calculable
+ */
+export function calculateTAEG(principal, upfrontFees, payments) {
+  const received = principal - (upfrontFees || 0)
+  const totalPaid = payments.reduce((sum, p) => sum + p, 0)
+  if (!(received > 0) || payments.length === 0 || totalPaid <= 0) return null
+  // Tout ce qui est versé ne couvre même pas ce qui est reçu : pas de taux positif
+  if (totalPaid <= received) return 0
+
+  const presentValue = (i) => payments.reduce((sum, p, k) => sum + p / Math.pow(1 + i, k + 1), 0)
+  // La valeur actualisée décroît quand le taux monte : on encadre le taux mensuel entre 0 et 100 %
+  let low = 0
+  let high = 1
+  for (let step = 0; step < 100; step++) {
+    const mid = (low + high) / 2
+    if (presentValue(mid) > received) low = mid
+    else high = mid
+  }
+  const annual = (Math.pow(1 + (low + high) / 2, 12) - 1) * 100
+  return Math.round(annual * 100) / 100
 }
 
 /**
@@ -277,7 +320,7 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
  *
  * Les frais d'agence (FAA) peuvent être financés par le crédit (règle bancaire française).
  * Le prêt est donc plafonné au prix FAI = prix net vendeur + frais d'agence.
- * Les frais de notaire et les frais de dossier ne sont pas finançables : ils viennent de l'apport.
+ * Les frais de notaire, de dossier et de garantie ne sont pas finançables : ils viennent de l'apport.
  *   montantEmprunt = max(0, min(prixFAI, coûtTotal − apport))
  *
  * fundingGap indique le manque d'apport pour couvrir les frais de notaire et de dossier.
@@ -288,10 +331,11 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
  * @param {'€'|'%'} agencyFeesMode      - Mode de saisie des frais d'agence
  * @param {number} personalContribution  - Apport personnel (€)
  * @param {number} applicationFees       - Frais de dossier bancaire (€), optionnel
+ * @param {number} guaranteeFees         - Frais de garantie, caution ou hypothèque (€), optionnel
  * @returns {{ loanAmount, notaryFees, agencyFees, applicationFees, totalCost, fundingGap, surplus, contributionUsed }}
  *   surplus : part de l'apport qui dépasse le coût total ; contributionUsed : apport réellement mobilisé
  */
-export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0, agencyFeesMode = '€', personalContribution = 0, applicationFees = 0) {
+export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0, agencyFeesMode = '€', personalContribution = 0, applicationFees = 0, guaranteeFees = 0) {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
   // Les frais de notaire se calculent sur le prix net vendeur (hors agence FAA)
   const notaryFees = Math.round(propertyPrice * notaryRate * 100) / 100
@@ -301,21 +345,22 @@ export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0,
     : (agencyFees || 0)
 
   const appFees = applicationFees || 0
-  const totalCost = Math.round((propertyPrice + notaryFees + agencyFeesAmount + appFees) * 100) / 100
+  const guarantee = guaranteeFees || 0
+  const totalCost = Math.round((propertyPrice + notaryFees + agencyFeesAmount + appFees + guarantee) * 100) / 100
 
   // Le prêt peut couvrir prix net vendeur + frais d'agence (= prix FAI)
   // Les frais de notaire et de dossier ne sont pas finançables
   const prixFAI = propertyPrice + agencyFeesAmount
   const loanAmount = Math.max(0, Math.round(Math.min(prixFAI, totalCost - personalContribution) * 100) / 100)
 
-  // Apport manquant pour couvrir la partie non finançable (notaire + dossier)
-  const fundingGap = Math.max(0, Math.round((notaryFees + appFees - personalContribution) * 100) / 100)
+  // Apport manquant pour couvrir la partie non finançable (notaire + dossier + garantie)
+  const fundingGap = Math.max(0, Math.round((notaryFees + appFees + guarantee - personalContribution) * 100) / 100)
 
   // Apport supérieur au coût total : rien à emprunter, et une partie de l'apport reste disponible
   const surplus = Math.max(0, Math.round((personalContribution - totalCost) * 100) / 100)
   const contributionUsed = Math.round((personalContribution - surplus) * 100) / 100
 
-  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, applicationFees: appFees, totalCost, fundingGap, surplus, contributionUsed }
+  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, applicationFees: appFees, guaranteeFees: guarantee, totalCost, fundingGap, surplus, contributionUsed }
 }
 
 /**

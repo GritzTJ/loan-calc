@@ -27,6 +27,22 @@
         : 'Sur le capital emprunté : cotisation fixe (contrat de la banque).' }}
     </template>
   </FormField>
+
+  <!-- Quotité : n'a de sens qu'avec une assurance, donc affichée seulement quand un taux est saisi -->
+  <FormField v-if="rate > 0" v-slot="{ id }" :label="compact ? 'Quotité' : 'Quotité assurée'">
+    <NumberInput
+      :id="id"
+      :model-value="quota"
+      :min="1"
+      :max="200"
+      suffix="%"
+      placeholder="100"
+      @update:model-value="emit('update:quota', $event)"
+    />
+    <p v-if="!compact" class="text-xs text-ink-3 mt-1">
+      100 % pour un emprunteur seul. À deux, la somme des deux parts : de 100 % (50/50) à 200 %.
+    </p>
+  </FormField>
 </template>
 
 <script setup>
@@ -35,15 +51,18 @@ import FormField from './FormField.vue'
 import NumberInput from './NumberInput.vue'
 import SegmentedControl from './SegmentedControl.vue'
 
-// Taux d'assurance et base de calcul (capital initial ou restant dû), saisis ensemble dans trois onglets
+// Assurance emprunteur : taux, base de calcul (capital initial ou restant dû) et quotité,
+// saisis ensemble dans trois onglets
 defineProps({
   rate: { type: Number, default: null },
   mode: { type: String, default: 'initial' },
+  // Quotité assurée en % (null = 100)
+  quota: { type: Number, default: null },
   // Version étroite pour les colonnes de la comparaison
   compact: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:rate', 'update:mode'])
+const emit = defineEmits(['update:rate', 'update:mode', 'update:quota'])
 
 const COMPACT_MODES = [
   { value: 'initial', label: 'initial' },

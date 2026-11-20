@@ -41,6 +41,13 @@
         <NumberInput :id="id" v-model="applicationFees" suffix="€" placeholder="0" />
       </FormField>
 
+      <FormField label="Frais de garantie" hint="(optionnel)">
+        <template #default="{ id }">
+          <NumberInput :id="id" v-model="guaranteeFees" suffix="€" placeholder="0" />
+        </template>
+        <template #help>Caution ou hypothèque, souvent 1 à 1,5 % du prêt.</template>
+      </FormField>
+
       <FormField v-slot="{ labelId }" class="sm:col-span-2 lg:col-span-1" label="Type de bien" group>
         <SegmentedControl v-model="propertyType" :aria-labelledby="labelId" :options="PROPERTY_TYPES" />
       </FormField>
@@ -59,7 +66,7 @@
       <!-- Apport insuffisant pour couvrir les frais non finançables -->
       <p v-if="result.fundingGap > 0" class="notice notice-warn mt-4">
         Il manque <strong class="figure">{{ formatEuros(result.fundingGap) }}</strong> d'apport pour couvrir
-        les frais de notaire{{ result.applicationFees > 0 ? ' et de dossier' : '' }}.
+        les frais de notaire{{ result.applicationFees + result.guaranteeFees > 0 ? ' et les frais bancaires' : '' }}.
         Ces frais ne peuvent pas être financés par le crédit (les frais d'agence, eux, peuvent l'être).
       </p>
 
@@ -133,10 +140,11 @@ const DEFAULTS = {
   agencyFees: null,
   agencyFeesMode: '€',
   propertyType: 'ancien',
-  applicationFees: null
+  applicationFees: null,
+  guaranteeFees: null
 }
 const { state, reset } = usePersistedState('project', DEFAULTS)
-const { propertyPrice, personalContribution, agencyFees, agencyFeesMode, propertyType, applicationFees } = toRefs(state)
+const { propertyPrice, personalContribution, agencyFees, agencyFeesMode, propertyType, applicationFees, guaranteeFees } = toRefs(state)
 
 const { current, save, update } = useSavedSimulation('project', () => ({ ...state }))
 
@@ -149,6 +157,7 @@ watch(() => props.loadParams, (p) => {
   agencyFeesMode.value = p.agencyFeesMode === '%' ? '%' : '€'
   propertyType.value = p.propertyType in NOTARY_FEES ? p.propertyType : 'ancien'
   applicationFees.value = p.applicationFees ?? null
+  guaranteeFees.value = p.guaranteeFees ?? null
   current.value = p.source ?? null
 }, { immediate: true })
 
@@ -166,7 +175,8 @@ const result = computed(() =>
     agencyFees.value || 0,
     agencyFeesMode.value,
     personalContribution.value || 0,
-    applicationFees.value || 0
+    applicationFees.value || 0,
+    guaranteeFees.value || 0
   )
 )
 
@@ -185,7 +195,8 @@ const needSegments = computed(() => [
   { key: 'price', label: 'Prix net vendeur', value: propertyPrice.value || 0, color: 'capital', group: 'Finançable par le prêt' },
   { key: 'agency', label: 'Frais d\'agence', value: result.value.agencyFees, color: 'capital', group: 'Finançable par le prêt' },
   { key: 'notary', label: `Frais de notaire (${notaryRateLabel.value})`, value: result.value.notaryFees, color: 'apport', group: 'À payer avec l\'apport' },
-  { key: 'fees', label: 'Frais de dossier', value: result.value.applicationFees, color: 'apport', group: 'À payer avec l\'apport' }
+  { key: 'fees', label: 'Frais de dossier', value: result.value.applicationFees, color: 'apport', group: 'À payer avec l\'apport' },
+  { key: 'guarantee', label: 'Frais de garantie', value: result.value.guaranteeFees, color: 'apport', group: 'À payer avec l\'apport' }
 ])
 
 // Ordre : prêt, manque, apport — le manque se place entre les deux, sous les frais qu'il ne couvre pas
@@ -198,7 +209,8 @@ const resourceSegments = computed(() => [
 function onSimulate() {
   emit('simulate', {
     principal: result.value.loanAmount,
-    applicationFees: applicationFees.value
+    applicationFees: applicationFees.value,
+    guaranteeFees: guaranteeFees.value
   })
 }
 </script>

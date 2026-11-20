@@ -53,7 +53,7 @@
         <NumberInput :id="id" v-model="annualRate" :decimals="2" :max="MAX_RATE" suffix="%" placeholder="3,50" />
       </FormField>
 
-      <InsuranceField v-model:rate="insuranceRate" v-model:mode="insuranceMode" />
+      <InsuranceField v-model:rate="insuranceRate" v-model:mode="insuranceMode" v-model:quota="insuranceQuota" />
 
       <!-- Le bien visé : sert au calcul du prix accessible -->
       <h3 class="sm:col-span-2 lg:col-span-1 mt-2 pt-4 border-t border-line text-base font-semibold text-ink">Le bien visé</h3>
@@ -133,6 +133,7 @@ import {
   calculateBorrowingCapacity,
   calculateInsuranceCost,
   calculateMaxPropertyPrice,
+  effectiveInsuranceRate,
   formatCurrency,
   formatEuros,
   formatPercent,
@@ -181,6 +182,7 @@ const DEFAULTS = {
   annualRate: 3.5,
   insuranceRate: null,
   insuranceMode: 'initial',
+  insuranceQuota: 100,
   // Le bien visé. L'apport d'exemple couvre les frais de notaire : le premier écran montre un prix, pas 0 €.
   personalContribution: 25000,
   agencyFees: null,
@@ -192,7 +194,7 @@ const DEFAULTS = {
 const { state, reset } = usePersistedState('capacity', DEFAULTS)
 const {
   inputMode, monthlyIncome, monthlyCharges, debtRatio, directPayment, months, annualRate,
-  insuranceRate, insuranceMode, personalContribution, agencyFees, agencyFeesMode, propertyType
+  insuranceRate, insuranceMode, insuranceQuota, personalContribution, agencyFees, agencyFeesMode, propertyType
 } = toRefs(state)
 
 const { current, save, update } = useSavedSimulation('capacity', () => {
@@ -202,6 +204,7 @@ const { current, save, update } = useSavedSimulation('capacity', () => {
     annualRate: annualRate.value,
     insuranceRate: insuranceRate.value,
     insuranceMode: insuranceMode.value,
+    insuranceQuota: insuranceQuota.value,
     personalContribution: personalContribution.value,
     agencyFees: agencyFees.value,
     agencyFeesMode: agencyFeesMode.value,
@@ -230,6 +233,7 @@ watch(() => props.loadParams, (p) => {
   annualRate.value = p.annualRate ?? DEFAULTS.annualRate
   insuranceRate.value = p.insuranceRate ?? null
   insuranceMode.value = p.insuranceMode ?? 'initial' // absent avant la v2.6.3
+  insuranceQuota.value = p.insuranceQuota ?? 100 // absent avant la v2.6.4
   // Le bien visé n'est enregistré que depuis la v2.6.0 : une simulation plus ancienne ne le connaît pas
   // et garde donc celui en cours ; une simulation récente le restaure tel quel, champs vides compris.
   if ('personalContribution' in p) {
@@ -263,13 +267,16 @@ const monthlyBudget = computed(() => {
   return directPayment.value || 0
 })
 
+// Taux d'assurance réellement payé : celui du contrat appliqué à la quotité assurée
+const insuranceCostRate = computed(() => effectiveInsuranceRate(insuranceRate.value, insuranceQuota.value))
+
 // Capital dont la mensualité + l'assurance consomment exactement le budget
 const capacity = computed(() =>
-  calculateBorrowingCapacity(monthlyBudget.value, annualRate.value, months.value, insuranceRate.value || 0)
+  calculateBorrowingCapacity(monthlyBudget.value, annualRate.value, months.value, insuranceCostRate.value)
 )
 
 const monthlyInsurance = computed(() =>
-  calculateInsuranceCost(capacity.value, insuranceRate.value)
+  calculateInsuranceCost(capacity.value, insuranceCostRate.value)
 )
 
 // Part du budget disponible pour le crédit seul
@@ -294,7 +301,8 @@ function onSimulate() {
     annualRate: annualRate.value,
     months: months.value,
     insuranceRate: insuranceRate.value,
-    insuranceMode: insuranceMode.value
+    insuranceMode: insuranceMode.value,
+    insuranceQuota: insuranceQuota.value
   })
 }
 </script>

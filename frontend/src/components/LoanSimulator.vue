@@ -31,11 +31,29 @@
         <template #help>Première mensualité le {{ firstPaymentLabel }}</template>
       </FormField>
 
-      <InsuranceField v-model:rate="insuranceRate" v-model:mode="insuranceMode" />
+      <InsuranceField v-model:rate="insuranceRate" v-model:mode="insuranceMode" v-model:quota="insuranceQuota" />
 
-      <FormField v-slot="{ id }" label="Frais de dossier" hint="(optionnel)">
-        <NumberInput :id="id" v-model="applicationFees" suffix="€" placeholder="0" />
-      </FormField>
+      <CollapsibleSection title="Frais et seuil d'usure" :summary="feesSummary" :open="upfrontFees > 0 || usuryOverride !== null">
+        <FormField v-slot="{ id }" label="Frais de dossier" hint="(optionnel)">
+          <NumberInput :id="id" v-model="applicationFees" suffix="€" placeholder="0" />
+        </FormField>
+
+        <FormField label="Frais de garantie" hint="(optionnel)">
+          <template #default="{ id }">
+            <NumberInput :id="id" v-model="guaranteeFees" suffix="€" placeholder="0" />
+          </template>
+          <template #help>Caution ou hypothèque : le montant figure dans l'offre de prêt, souvent 1 à 1,5 % du capital.</template>
+        </FormField>
+
+        <FormField label="Seuil d'usure" hint="(optionnel)">
+          <template #default="{ id }">
+            <NumberInput :id="id" v-model="usuryOverride" :decimals="2" :max="MAX_RATE" suffix="%" :placeholder="formatRate(embeddedUsury)" />
+          </template>
+          <template #help>
+            Laissez vide pour le seuil du {{ USURY.label }} ({{ formatPercent(embeddedUsury) }} pour cette durée).
+          </template>
+        </FormField>
+      </CollapsibleSection>
     </template>
 
     <template #result>
@@ -69,6 +87,10 @@
             <span class="text-ink-2 pl-[1.125rem]">Frais de dossier</span>
             <span class="figure text-ink">{{ formatEuros(applicationFees) }}</span>
           </li>
+          <li v-if="guaranteeFees > 0" class="flex items-baseline justify-between gap-3 text-sm">
+            <span class="text-ink-2 pl-[1.125rem]">Frais de garantie</span>
+            <span class="figure text-ink">{{ formatEuros(guaranteeFees) }}</span>
+          </li>
           <li class="flex items-baseline justify-between gap-3 text-sm pt-2 mt-2 border-t border-line">
             <span class="flex items-center font-medium text-ink">
               Coût du crédit
@@ -79,8 +101,32 @@
             </span>
             <span class="figure text-base text-ink">{{ formatEuros(creditCost) }}</span>
           </li>
+          <!-- TAEG : le taux tout compris, celui que les banques affichent et que la loi plafonne -->
+          <li v-if="taeg !== null" class="flex items-baseline justify-between gap-3 text-sm pt-2">
+            <span class="flex items-center font-medium text-ink">
+              TAEG
+              <InfoTooltip
+                principe="Taux annuel tout compris : intérêts, assurance, frais de dossier et de garantie"
+                :calcul="`Taux nominal ${formatPercent(annualRate)}, frais au départ ${formatEuros(upfrontFees)}`"
+              />
+            </span>
+            <span class="figure text-base text-ink">{{ formatPercent(taeg) }}</span>
+          </li>
         </template>
       </FundingBar>
+
+      <!-- Seuil d'usure : au-dessus, la banque ne peut pas accorder le prêt. L'état est écrit, pas seulement coloré. -->
+      <template v-if="taeg !== null">
+        <p v-if="taeg > usuryRate" role="alert" class="notice notice-danger mt-4">
+          Le TAEG dépasse le seuil d'usure de <strong class="figure">{{ formatPercent(usuryRate) }}</strong> :
+          une banque ne peut pas accorder ce prêt en l'état.
+          <span v-if="usuryNote">{{ usuryNote }}</span>
+        </p>
+        <p v-else class="mt-3 text-sm text-ink-2">
+          Sous le seuil d'usure de <span class="figure text-ink">{{ formatPercent(usuryRate) }}</span>.
+          <span v-if="usuryNote" class="text-ink-3">{{ usuryNote }}</span>
+        </p>
+      </template>
     </template>
 
     <template #below>
@@ -93,6 +139,7 @@
 import { computed, toRefs, watch } from 'vue'
 import {
   calculateMonthlyPayment,
+  calculateTAEG,
   generateAmortizationTable,
   getDefaultStartDate,
   formatCurrency,
@@ -103,10 +150,12 @@ import {
   sanitizeMonths,
   MAX_RATE
 } from '../services/loanCalculator.js'
+import { USURY, usuryRateFor, isUsuryOutdated } from '../services/usury.js'
 import { usePersistedState } from '../composables/usePersistedState.js'
 import { useSavedSimulation } from '../composables/useSavedSimulation.js'
 import AmortizationTable from './AmortizationTable.vue'
 import CalculatorLayout from './CalculatorLayout.vue'
+import CollapsibleSection from './CollapsibleSection.vue'
 import DurationField from './DurationField.vue'
 import FormField from './FormField.vue'
 import FundingBar from './FundingBar.vue'
@@ -130,9 +179,16 @@ const { state, reset } = usePersistedState('simulator', {
   startDate: null,
   insuranceRate: null,
   insuranceMode: 'initial',
-  applicationFees: null
+  insuranceQuota: 100,
+  applicationFees: null,
+  guaranteeFees: null,
+  // null = seuil d'usure embarqué (services/usury.js) pour la durée du prêt
+  usuryOverride: null
 })
-const { principal, annualRate, months, insuranceRate, insuranceMode, applicationFees } = toRefs(state)
+const {
+  principal, annualRate, months, insuranceRate, insuranceMode, insuranceQuota,
+  applicationFees, guaranteeFees, usuryOverride
+} = toRefs(state)
 
 const toDateInput = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -150,7 +206,9 @@ const { current, save, update } = useSavedSimulation('loan', () => ({
   startDate: startDateStr.value,
   insuranceRate: insuranceRate.value,
   insuranceMode: insuranceMode.value,
-  applicationFees: applicationFees.value
+  insuranceQuota: insuranceQuota.value,
+  applicationFees: applicationFees.value,
+  guaranteeFees: guaranteeFees.value
 }))
 
 watch(() => props.loadParams, (p) => {
@@ -166,7 +224,9 @@ watch(() => props.loadParams, (p) => {
   insuranceRate.value = loaded('insuranceRate', insuranceRate.value)
   // Absent des simulations antérieures à la v2.6.3, qui calculaient sur le capital initial
   insuranceMode.value = loaded('insuranceMode', insuranceMode.value, 'initial')
+  insuranceQuota.value = loaded('insuranceQuota', insuranceQuota.value, 100)
   applicationFees.value = loaded('applicationFees', applicationFees.value)
+  guaranteeFees.value = loaded('guaranteeFees', guaranteeFees.value)
   if (p.startDate) state.startDate = p.startDate
   // « Simuler ce prêt » crée une nouvelle saisie : elle n'est plus liée à une simulation enregistrée
   current.value = p.source ?? null
@@ -202,7 +262,8 @@ const monthlyPayment = computed(() =>
 const amortizationTable = computed(() =>
   generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value, {
     insuranceRate: insuranceRate.value,
-    insuranceMode: insuranceMode.value
+    insuranceMode: insuranceMode.value,
+    insuranceQuota: insuranceQuota.value
   })
 )
 
@@ -231,9 +292,31 @@ const totalPayments = computed(() =>
   Math.round((principal.value + totalInterest.value + totalInsurance.value) * 100) / 100
 )
 
+// Frais payés au départ, hors mensualités
+const upfrontFees = computed(() => (applicationFees.value || 0) + (guaranteeFees.value || 0))
+
 const creditCost = computed(() =>
-  Math.round((totalInterest.value + totalInsurance.value + (applicationFees.value || 0)) * 100) / 100
+  Math.round((totalInterest.value + totalInsurance.value + upfrontFees.value) * 100) / 100
 )
+
+const taeg = computed(() =>
+  calculateTAEG(principal.value, upfrontFees.value, amortizationTable.value.map(row => row.totalPayment))
+)
+
+// Seuil d'usure : celui saisi, sinon celui du trimestre embarqué pour la durée du prêt
+const embeddedUsury = computed(() => usuryRateFor(months.value || 0))
+const usuryRate = computed(() => usuryOverride.value ?? embeddedUsury.value)
+const usuryNote = computed(() => {
+  if (usuryOverride.value !== null) return 'Seuil saisi par vos soins.'
+  return isUsuryOutdated()
+    ? `Seuil du ${USURY.label}, périmé : vérifiez la valeur en vigueur.`
+    : `Seuil du ${USURY.label}.`
+})
+
+// Taux sans unité, pour l'exemple grisé d'un champ qui affiche déjà « % »
+const formatRate = (value) => String(value).replace('.', ',')
+
+const feesSummary = computed(() => (upfrontFees.value > 0 ? formatEuros(upfrontFees.value) : ''))
 
 const costSegments = computed(() => [
   { key: 'capital', label: 'Capital emprunté', value: principal.value || 0, color: 'capital' },
@@ -245,6 +328,7 @@ const creditCostFormula = computed(() => {
   const parts = [`${formatEuros(totalInterest.value)} d'intérêts`]
   if (totalInsurance.value > 0) parts.push(`${formatEuros(totalInsurance.value)} d'assurance`)
   if (applicationFees.value > 0) parts.push(`${formatEuros(applicationFees.value)} de frais de dossier`)
+  if (guaranteeFees.value > 0) parts.push(`${formatEuros(guaranteeFees.value)} de garantie`)
   return parts.join(' + ')
 })
 </script>
