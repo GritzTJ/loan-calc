@@ -80,6 +80,12 @@
               <td v-if="hasInsurance" class="hidden sm:table-cell text-right text-ink-2">{{ formatCurrency(row.insurancePart) }}</td>
               <td class="hidden sm:table-cell text-right text-ink-2">{{ formatCurrency(row.totalPayment) }}</td>
             </tr>
+            <!-- Remboursement anticipé versé après cette échéance : le restant dû de la ligne en tient déjà compte -->
+            <tr v-for="row in year.rows.filter(r => r.extraPayment > 0)" :key="`extra-${row.number}`" class="bg-sunken/40 text-[0.8125rem]">
+              <td :colspan="hasInsurance ? 6 : 5" class="text-ink pl-7 !whitespace-normal">
+                Remboursement anticipé de <span class="figure">{{ formatEuros(row.extraPayment) }}</span> après l'échéance du {{ formatDate(row.date) }}<template v-if="row.penalty > 0">, indemnités de <span class="figure">{{ formatEuros(row.penalty) }}</span></template>
+              </td>
+            </tr>
           </template>
         </tbody>
       </table>

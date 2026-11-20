@@ -5,6 +5,14 @@
 
 import { calculateNotaryFees } from './notaryFees.js'
 
+// Bornes de saisie. Sans plafond de durée, un montant tapé par erreur dans le champ « durée »
+// génère un tableau d'amortissement de centaines de milliers de lignes et fige le navigateur.
+export const MAX_LOAN_MONTHS = 600 // 50 ans
+// 30 % : très au-dessus de tout taux réel. Au-delà, la mensualité arrondie ne couvre plus que les intérêts
+// et le tableau d'amortissement dégénère (tout le capital sur la dernière échéance).
+export const MAX_RATE = 30         // %
+
+
 /**
  * Calcule la mensualité d'un prêt à taux fixe (amortissement constant).
  * Formule : M = C × t / (1 − (1 + t)^(−n))
@@ -45,6 +53,20 @@ export function effectiveInsuranceRate(insuranceRate, quota) {
 }
 
 /**
+ * Indemnités de remboursement anticipé, au plafond légal (Code de la consommation, art. R313-25) :
+ * six mois d'intérêts sur le capital remboursé, sans dépasser 3 % du capital restant dû avant remboursement.
+ * Beaucoup de contrats prévoient moins, voire rien : c'est un maximum.
+ * @param {number} repaid - Capital remboursé par anticipation (€)
+ * @param {number} remainingBefore - Capital restant dû avant le remboursement (€)
+ * @param {number} annualRate - Taux du prêt (%)
+ * @returns {number} Indemnités (€)
+ */
+export function calculateEarlyRepaymentPenalty(repaid, remainingBefore, annualRate) {
+  const sixMonthsInterest = repaid * (annualRate || 0) / 100 / 2
+  return Math.round(Math.min(sixMonthsInterest, remainingBefore * 0.03) * 100) / 100
+}
+
+/**
  * Génère le tableau d'amortissement complet.
  * La 1re mensualité tombe le 1er du mois suivant la date de début.
  *
@@ -52,53 +74,93 @@ export function effectiveInsuranceRate(insuranceRate, quota) {
  * l'échéance théorique : la part de capital est plafonnée au restant dû, le tableau s'arrête dès que
  * le prêt est soldé, et la dernière échéance absorbe l'écart d'arrondi.
  *
+ * Deux événements peuvent modifier le déroulé (options.events) :
+ *   earlyRepayment { amount, afterMonth, effect, withPenalty } — remboursement anticipé versé juste après
+ *     l'échéance n° afterMonth. effect 'duration' : la mensualité ne change pas, le prêt finit plus tôt.
+ *     effect 'payment' : la fin ne change pas, la mensualité est recalculée sur le capital restant.
+ *   modulation { payment, fromMonth } — nouvelle mensualité de crédit à partir de l'échéance n° fromMonth ;
+ *     la durée s'ajuste (dans la limite de MAX_LOAN_MONTHS).
+ *
  * @param {number} principal - Montant emprunté (€)
  * @param {number} annualRate - Taux annuel (%)
  * @param {number} months - Nombre de mensualités
  * @param {Date} startDate - Date de début du prêt
  * @param {{ insuranceRate?: number, insuranceMode?: 'initial'|'crd', insuranceQuota?: number }} [insurance] - Assurance emprunteur
+ * @param {{ earlyRepayment?: Object, modulation?: Object }} [events]
  * @returns {Array<Object>} Lignes { number, date, remainingPrincipal, principalPart, interestPart,
- *   payment (crédit seul), insurancePart, totalPayment (crédit + assurance) }
+ *   payment (crédit seul), insurancePart, totalPayment (crédit + assurance),
+ *   extraPayment (remboursement anticipé versé ce mois), penalty (indemnités) }
  */
-export function generateAmortizationTable(principal, annualRate, months, startDate, insurance = {}) {
-  const monthlyPayment = calculateMonthlyPayment(principal, annualRate, months)
+export function generateAmortizationTable(principal, annualRate, months, startDate, insurance = {}, events = {}) {
+  let monthlyPayment = calculateMonthlyPayment(principal, annualRate, months)
   if (monthlyPayment === 0) return []
 
   const monthlyRate = annualRate / 100 / 12
   const insuranceMonthlyRate = effectiveInsuranceRate(insurance.insuranceRate, insurance.insuranceQuota) / 100 / 12
   const insuranceOnRemaining = insurance.insuranceMode === 'crd'
   let remainingPrincipal = Math.round(principal * 100) / 100
+  // Base de l'assurance « capital initial » : réduite d'un remboursement anticipé, comme le fait l'assureur
+  let insuredCapital = remainingPrincipal
   const table = []
+
+  const early = events.earlyRepayment?.amount > 0 && events.earlyRepayment.afterMonth >= 1 ? events.earlyRepayment : null
+  const modulation = events.modulation?.payment > 0 && events.modulation.fromMonth >= 1 ? events.modulation : null
+  // Échéance à laquelle le prêt doit être soldé. Une modulation la libère : c'est la durée qui s'ajuste.
+  let lastNumber = months
 
   // La 1re mensualité tombe le 1er du mois suivant la date de début
   const firstPaymentDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1)
 
-  for (let i = 0; i < months; i++) {
+  for (let i = 0; i < MAX_LOAN_MONTHS; i++) {
+    const number = i + 1
+    if (modulation && number === modulation.fromMonth) {
+      monthlyPayment = modulation.payment
+      lastNumber = MAX_LOAN_MONTHS
+    }
+
     const date = new Date(firstPaymentDate.getFullYear(), firstPaymentDate.getMonth() + i, 1)
     const interestPart = Math.round(remainingPrincipal * monthlyRate * 100) / 100
-    const insuranceBase = insuranceOnRemaining ? remainingPrincipal : principal
+    const insuranceBase = insuranceOnRemaining ? remainingPrincipal : insuredCapital
     const insurancePart = Math.round(insuranceBase * insuranceMonthlyRate * 100) / 100
 
     // Part de capital de la mensualité constante (jamais négative, même si l'arrondi la rend inférieure aux intérêts)
     const regularPrincipalPart = Math.max(0, Math.round((monthlyPayment - interestPart) * 100) / 100)
     // Dernière échéance : la dernière prévue, ou celle qui solde le prêt en avance
-    const isLast = i === months - 1 || regularPrincipalPart >= remainingPrincipal
+    const isLast = number >= lastNumber || regularPrincipalPart >= remainingPrincipal
     const principalPart = isLast ? remainingPrincipal : regularPrincipalPart
     const payment = isLast ? Math.round((principalPart + interestPart) * 100) / 100 : monthlyPayment
 
     remainingPrincipal = isLast ? 0 : Math.round((remainingPrincipal - principalPart) * 100) / 100
 
-    table.push({
-      number: i + 1,
+    const row = {
+      number,
       date,
       remainingPrincipal,
       principalPart,
       interestPart,
       payment,
       insurancePart,
-      totalPayment: Math.round((payment + insurancePart) * 100) / 100
-    })
-    if (isLast) break
+      totalPayment: Math.round((payment + insurancePart) * 100) / 100,
+      extraPayment: 0,
+      penalty: 0
+    }
+    table.push(row)
+
+    // Remboursement anticipé, versé juste après cette échéance
+    if (early && number === early.afterMonth && remainingPrincipal > 0) {
+      const repaid = Math.min(early.amount, remainingPrincipal)
+      row.extraPayment = Math.round(repaid * 100) / 100
+      row.penalty = early.withPenalty ? calculateEarlyRepaymentPenalty(repaid, remainingPrincipal, annualRate) : 0
+      remainingPrincipal = Math.round((remainingPrincipal - repaid) * 100) / 100
+      insuredCapital = Math.max(0, Math.round((insuredCapital - repaid) * 100) / 100)
+      row.remainingPrincipal = remainingPrincipal
+      // Même fin de prêt, mensualité recalculée sur ce qu'il reste à rembourser
+      if (early.effect === 'payment' && remainingPrincipal > 0 && lastNumber > number && !(modulation && number >= modulation.fromMonth)) {
+        monthlyPayment = calculateMonthlyPayment(remainingPrincipal, annualRate, lastNumber - number)
+      }
+    }
+
+    if (remainingPrincipal === 0) break
   }
 
   return table
@@ -107,25 +169,28 @@ export function generateAmortizationTable(principal, annualRate, months, startDa
 /**
  * Regroupe le tableau d'amortissement par année de prêt (12 échéances).
  * @param {Array<Object>} rows - Lignes de generateAmortizationTable
- * @returns {Array<Object>} { year, principal, interest, insurance, total, remainingPrincipal (en fin d'année), rows }
+ * @returns {Array<Object>} { year, principal, interest, insurance, total, extra (remboursement anticipé
+ *   et indemnités), remainingPrincipal (en fin d'année), rows }
  */
 export function summarizeByYear(rows) {
   const years = []
   for (const row of rows) {
     const year = Math.ceil(row.number / 12)
     if (!years[year - 1]) {
-      years[year - 1] = { year, principal: 0, interest: 0, insurance: 0, total: 0, remainingPrincipal: 0, rows: [] }
+      years[year - 1] = { year, principal: 0, interest: 0, insurance: 0, total: 0, extra: 0, remainingPrincipal: 0, rows: [] }
     }
     const y = years[year - 1]
-    y.principal += row.principalPart
+    // Un remboursement anticipé est du capital remboursé cette année-là ; ses indemnités s'ajoutent à ce qui est payé
+    y.principal += row.principalPart + row.extraPayment
     y.interest += row.interestPart
     y.insurance += row.insurancePart
-    y.total += row.totalPayment
+    y.extra += row.extraPayment + row.penalty
+    y.total += row.totalPayment + row.extraPayment + row.penalty
     y.remainingPrincipal = row.remainingPrincipal
     y.rows.push(row)
   }
   const round = (x) => Math.round(x * 100) / 100
-  return years.map(y => ({ ...y, principal: round(y.principal), interest: round(y.interest), insurance: round(y.insurance), total: round(y.total) }))
+  return years.map(y => ({ ...y, principal: round(y.principal), interest: round(y.interest), insurance: round(y.insurance), total: round(y.total), extra: round(y.extra) }))
 }
 
 /**
@@ -196,13 +261,6 @@ export function calculateBorrowingCapacity(monthlyPayment, annualRate, months, i
   const capacity = monthlyPayment / (paymentPerEuro + insurancePerEuro)
   return Math.round(capacity * 100) / 100
 }
-
-// Bornes de saisie. Sans plafond de durée, un montant tapé par erreur dans le champ « durée »
-// génère un tableau d'amortissement de centaines de milliers de lignes et fige le navigateur.
-export const MAX_LOAN_MONTHS = 600 // 50 ans
-// 30 % : très au-dessus de tout taux réel. Au-delà, la mensualité arrondie ne couvre plus que les intérêts
-// et le tableau d'amortissement dégénère (tout le capital sur la dernière échéance).
-export const MAX_RATE = 30         // %
 
 /**
  * Ramène une durée venue d'ailleurs que du formulaire (simulation de l'historique) dans les bornes

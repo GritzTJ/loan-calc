@@ -8,6 +8,7 @@ import { formatDate } from './loanCalculator.js'
 export function exportAmortizationToXlsx(rows) {
   // La colonne Assurance n'apparaît que si le prêt est assuré
   const hasInsurance = rows.some(row => row.insurancePart > 0)
+  const hasExtra = rows.some(row => row.extraPayment > 0)
   const data = rows.map(row => ({
     'N°': row.number,
     'Date': formatDate(row.date),
@@ -15,7 +16,8 @@ export function exportAmortizationToXlsx(rows) {
     'Part capital (€)': row.principalPart,
     'Part intérêts (€)': row.interestPart,
     'Mensualité de crédit (€)': row.payment,
-    ...(hasInsurance ? { 'Assurance (€)': row.insurancePart, 'Total payé (€)': row.totalPayment } : {})
+    ...(hasInsurance ? { 'Assurance (€)': row.insurancePart, 'Total payé (€)': row.totalPayment } : {}),
+    ...(hasExtra ? { 'Remboursement anticipé (€)': row.extraPayment, 'Indemnités (€)': row.penalty } : {})
   }))
 
   const ws = utils.json_to_sheet(data)

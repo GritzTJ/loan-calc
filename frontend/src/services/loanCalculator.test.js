@@ -12,6 +12,7 @@ import {
   sanitizeMonths,
   summarizeByYear,
   calculateTAEG,
+  calculateEarlyRepaymentPenalty,
   effectiveInsuranceRate,
   formatEuros,
   MAX_LOAN_MONTHS
@@ -424,5 +425,97 @@ describe('plan de financement au barème réel et travaux', () => {
     const majore = calculateLoanAmount(250000, 'ancien', 0, '€', 0, 0, 0, { dmtoRate: 'majore' })
     const normal = calculateLoanAmount(250000, 'ancien', 0, '€', 0, 0, 0, { dmtoRate: 'normal' })
     expect(majore.notaryFees - normal.notaryFees).toBeCloseTo(250000 * (6.3185 - 5.80665) / 100, 1)
+  })
+})
+
+describe('remboursement anticipé et modulation', () => {
+  const start = new Date(2026, 9, 2)
+  const sum = (table, key) => Math.round(table.reduce((total, r) => total + r[key], 0) * 100) / 100
+  const base = generateAmortizationTable(200000, 3.5, 240, start)
+
+  it('plafonne les indemnités à 6 mois d\'intérêts ou 3 % du restant dû', () => {
+    // 20 000 € à 3,5 % : 6 mois d'intérêts = 350 € ; 3 % de 150 000 € = 4 500 € → 350 €
+    expect(calculateEarlyRepaymentPenalty(20000, 150000, 3.5)).toBe(350)
+    // À 8 %, sur un prêt soldé : 6 mois = 4 000 € ; 3 % de 100 000 € = 3 000 € → 3 000 €
+    expect(calculateEarlyRepaymentPenalty(100000, 100000, 8)).toBe(3000)
+  })
+
+  it('réduire la durée : même mensualité, prêt soldé plus tôt, intérêts économisés', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, {}, {
+      earlyRepayment: { amount: 20000, afterMonth: 60, effect: 'duration', withPenalty: true }
+    })
+    expect(table.length).toBeLessThan(240)
+    expect(table[100].payment).toBe(base[0].payment)
+    expect(table[59].extraPayment).toBe(20000)
+    expect(table[59].penalty).toBe(350)
+    expect(table[59].remainingPrincipal).toBe(Math.round((base[59].remainingPrincipal - 20000) * 100) / 100)
+    expect(table.at(-1).remainingPrincipal).toBe(0)
+    // Tout le capital est remboursé, par les échéances et par le versement anticipé
+    expect(Math.round((sum(table, 'principalPart') + sum(table, 'extraPayment')) * 100) / 100).toBe(200000)
+    expect(sum(table, 'interestPart')).toBeLessThan(sum(base, 'interestPart'))
+  })
+
+  it('réduire la mensualité : même fin de prêt, mensualité plus basse', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, {}, {
+      earlyRepayment: { amount: 20000, afterMonth: 60, effect: 'payment', withPenalty: false }
+    })
+    expect(table.length).toBe(240)
+    expect(table[59].payment).toBe(base[0].payment)
+    expect(table[60].payment).toBeLessThan(base[0].payment)
+    expect(table[59].penalty).toBe(0)
+    expect(table.at(-1).remainingPrincipal).toBe(0)
+    expect(Math.round((sum(table, 'principalPart') + sum(table, 'extraPayment')) * 100) / 100).toBe(200000)
+  })
+
+  it('un remboursement supérieur au restant dû solde le prêt', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, {}, {
+      earlyRepayment: { amount: 999999, afterMonth: 120, effect: 'duration', withPenalty: false }
+    })
+    expect(table.length).toBe(120)
+    expect(table.at(-1).extraPayment).toBe(base[119].remainingPrincipal)
+    expect(table.at(-1).remainingPrincipal).toBe(0)
+  })
+
+  it('l\'assurance sur capital initial baisse en proportion du remboursement', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, { insuranceRate: 0.3 }, {
+      earlyRepayment: { amount: 50000, afterMonth: 12, effect: 'payment', withPenalty: false }
+    })
+    expect(table[11].insurancePart).toBe(50)
+    expect(table[12].insurancePart).toBe(37.5)
+  })
+
+  it('modulation à la hausse : la durée raccourcit ; à la baisse : elle s\'allonge', () => {
+    const higher = generateAmortizationTable(200000, 3.5, 240, start, {}, { modulation: { payment: 1400, fromMonth: 25 } })
+    expect(higher[23].payment).toBe(base[0].payment)
+    expect(higher[24].payment).toBe(1400)
+    expect(higher.length).toBeLessThan(240)
+    expect(higher.at(-1).remainingPrincipal).toBe(0)
+
+    const lower = generateAmortizationTable(200000, 3.5, 240, start, {}, { modulation: { payment: 1000, fromMonth: 25 } })
+    expect(lower.length).toBeGreaterThan(240)
+    expect(lower.at(-1).remainingPrincipal).toBe(0)
+    expect(sum(lower, 'principalPart')).toBe(200000)
+  })
+
+  it('une mensualité qui ne couvre pas les intérêts s\'arrête à la durée maximale, capital soldé', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, {}, { modulation: { payment: 100, fromMonth: 2 } })
+    expect(table.length).toBe(MAX_LOAN_MONTHS)
+    expect(table.every(r => r.principalPart >= 0)).toBe(true)
+    expect(table.at(-1).remainingPrincipal).toBe(0)
+  })
+
+  it('sans événement, le tableau est inchangé', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, {}, { earlyRepayment: { amount: 0, afterMonth: 60 }, modulation: null })
+    expect(table).toEqual(base)
+  })
+
+  it('summarizeByYear compte le remboursement anticipé dans le capital et les indemnités dans le payé', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, {}, {
+      earlyRepayment: { amount: 20000, afterMonth: 6, effect: 'duration', withPenalty: true }
+    })
+    const [first] = summarizeByYear(table)
+    expect(first.extra).toBe(20350)
+    expect(first.remainingPrincipal).toBe(table[11].remainingPrincipal)
+    expect(Math.round((200000 - first.principal) * 100) / 100).toBe(first.remainingPrincipal)
   })
 })

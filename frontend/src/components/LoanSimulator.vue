@@ -54,6 +54,16 @@
           </template>
         </FormField>
       </CollapsibleSection>
+
+      <EarlyRepayment
+        v-model:amount="earlyAmount"
+        v-model:after-months="earlyAfterMonths"
+        v-model:effect="earlyEffect"
+        v-model:with-penalty="earlyPenalty"
+        v-model:modulation-payment="modulationPayment"
+        v-model:modulation-after-months="modulationAfterMonths"
+        :placeholder-payment="formatRate(monthlyPayment)"
+      />
     </template>
 
     <template #result>
@@ -75,10 +85,45 @@
         l'assurance suit le capital restant dû.
       </p>
       <p class="mt-1 text-sm text-ink-3">
-        Pendant {{ formatDuration(months) }}, à partir du {{ firstPaymentLabel }}
+        Pendant {{ formatDuration(amortizationTable.length) }}, à partir du {{ firstPaymentLabel }}
       </p>
       <div class="mt-4">
         <SaveSimulation placeholder="Ex : Appart Lyon - 20 ans" :save="save" :update="update" :current="current" />
+      </div>
+
+      <!-- Effet d'un remboursement anticipé ou d'un changement de mensualité, par rapport au prêt sans changement -->
+      <div v-if="eventsEffect" class="mt-5 pt-4 border-t border-line">
+        <h4 class="text-sm font-medium text-ink">Avec ces changements</h4>
+        <p v-if="eventsEffect.notAmortizing" role="alert" class="notice notice-danger mt-2">
+          La nouvelle mensualité ne couvre pas les intérêts : le prêt ne se rembourse plus.
+        </p>
+        <ul v-else class="mt-2 space-y-1.5 text-sm">
+          <li class="flex items-baseline justify-between gap-3">
+            <span class="text-ink-2">Fin du prêt</span>
+            <span class="text-right text-ink">
+              <span class="figure">{{ eventsEffect.endLabel }}</span>
+              <span v-if="eventsEffect.monthsDelta" class="block text-xs text-ink-2">
+                {{ formatDuration(Math.abs(eventsEffect.monthsDelta)) }} {{ eventsEffect.monthsDelta < 0 ? 'plus tôt' : 'plus tard' }}
+              </span>
+            </span>
+          </li>
+          <li v-if="eventsEffect.newPayment !== null" class="flex items-baseline justify-between gap-3">
+            <span class="text-ink-2">Mensualité de crédit ensuite</span>
+            <span class="figure text-ink">{{ formatCurrency(eventsEffect.newPayment) }}</span>
+          </li>
+          <li class="flex items-baseline justify-between gap-3">
+            <span class="text-ink-2">{{ eventsEffect.saving >= 0 ? 'Intérêts et assurance économisés' : 'Intérêts et assurance en plus' }}</span>
+            <span class="figure text-ink">{{ formatEuros(Math.abs(eventsEffect.saving)) }}</span>
+          </li>
+          <li v-if="eventsEffect.penalty > 0" class="flex items-baseline justify-between gap-3">
+            <span class="text-ink-2">Indemnités de remboursement anticipé</span>
+            <span class="figure text-ink">{{ formatEuros(eventsEffect.penalty) }}</span>
+          </li>
+          <li v-if="eventsEffect.penalty > 0" class="flex items-baseline justify-between gap-3 font-medium">
+            <span class="text-ink">{{ eventsEffect.net >= 0 ? 'Gain net' : 'Coût net' }}</span>
+            <span class="figure text-ink">{{ formatEuros(Math.abs(eventsEffect.net)) }}</span>
+          </li>
+        </ul>
       </div>
 
       <FundingBar class="mt-6" title="Total des mensualités" :total="totalPayments" :segments="costSegments">
@@ -86,6 +131,10 @@
           <li v-if="applicationFees > 0" class="flex items-baseline justify-between gap-3 text-sm">
             <span class="text-ink-2 pl-[1.125rem]">Frais de dossier</span>
             <span class="figure text-ink">{{ formatEuros(applicationFees) }}</span>
+          </li>
+          <li v-if="totalPenalty > 0" class="flex items-baseline justify-between gap-3 text-sm">
+            <span class="text-ink-2 pl-[1.125rem]">Indemnités de remboursement anticipé</span>
+            <span class="figure text-ink">{{ formatEuros(totalPenalty) }}</span>
           </li>
           <li v-if="guaranteeFees > 0" class="flex items-baseline justify-between gap-3 text-sm">
             <span class="text-ink-2 pl-[1.125rem]">Frais de garantie</span>
@@ -157,6 +206,7 @@ import AmortizationTable from './AmortizationTable.vue'
 import CalculatorLayout from './CalculatorLayout.vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import DurationField from './DurationField.vue'
+import EarlyRepayment from './EarlyRepayment.vue'
 import FormField from './FormField.vue'
 import FundingBar from './FundingBar.vue'
 import InsuranceField from './InsuranceField.vue'
@@ -183,12 +233,25 @@ const { state, reset } = usePersistedState('simulator', {
   applicationFees: null,
   guaranteeFees: null,
   // null = seuil d'usure embarqué (services/usury.js) pour la durée du prêt
-  usuryOverride: null
+  usuryOverride: null,
+  // Remboursement anticipé (inactif sans montant) : versé au bout de earlyAfterMonths mois
+  earlyAmount: null,
+  earlyAfterMonths: 60,
+  earlyEffect: 'duration', // 'duration' | 'payment'
+  earlyPenalty: true,
+  // Changement de mensualité (inactif sans montant) : appliqué au bout de modulationAfterMonths mois
+  modulationPayment: null,
+  modulationAfterMonths: 24
 })
 const {
   principal, annualRate, months, insuranceRate, insuranceMode, insuranceQuota,
-  applicationFees, guaranteeFees, usuryOverride
+  applicationFees, guaranteeFees, usuryOverride,
+  earlyAmount, earlyAfterMonths, earlyEffect, earlyPenalty, modulationPayment, modulationAfterMonths
 } = toRefs(state)
+
+// Champs du remboursement anticipé et de la modulation, enregistrés et rechargés tels quels
+const EVENT_FIELDS = ['earlyAmount', 'earlyAfterMonths', 'earlyEffect', 'earlyPenalty', 'modulationPayment', 'modulationAfterMonths']
+const EVENT_DEFAULTS = { earlyAmount: null, earlyAfterMonths: 60, earlyEffect: 'duration', earlyPenalty: true, modulationPayment: null, modulationAfterMonths: 24 }
 
 const toDateInput = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -208,7 +271,8 @@ const { current, save, update } = useSavedSimulation('loan', () => ({
   insuranceMode: insuranceMode.value,
   insuranceQuota: insuranceQuota.value,
   applicationFees: applicationFees.value,
-  guaranteeFees: guaranteeFees.value
+  guaranteeFees: guaranteeFees.value,
+  ...Object.fromEntries(EVENT_FIELDS.map(key => [key, state[key]]))
 }))
 
 watch(() => props.loadParams, (p) => {
@@ -227,6 +291,8 @@ watch(() => props.loadParams, (p) => {
   insuranceQuota.value = loaded('insuranceQuota', insuranceQuota.value, 100)
   applicationFees.value = loaded('applicationFees', applicationFees.value)
   guaranteeFees.value = loaded('guaranteeFees', guaranteeFees.value)
+  // Absents avant la v2.6.6 : une simulation plus ancienne n'a ni remboursement anticipé ni modulation
+  for (const key of EVENT_FIELDS) state[key] = loaded(key, state[key], EVENT_DEFAULTS[key])
   if (p.startDate) state.startDate = p.startDate
   // « Simuler ce prêt » crée une nouvelle saisie : elle n'est plus liée à une simulation enregistrée
   current.value = p.source ?? null
@@ -257,14 +323,35 @@ const monthlyPayment = computed(() =>
   calculateMonthlyPayment(principal.value, annualRate.value, months.value)
 )
 
+// Événements en cours de prêt. « Au bout de N mois » : le remboursement suit l'échéance n° N,
+// la nouvelle mensualité s'applique à partir de l'échéance n° N + 1.
+const events = computed(() => ({
+  earlyRepayment: earlyAmount.value > 0 && earlyAfterMonths.value >= 1
+    ? { amount: earlyAmount.value, afterMonth: earlyAfterMonths.value, effect: earlyEffect.value, withPenalty: earlyPenalty.value }
+    : null,
+  modulation: modulationPayment.value > 0
+    ? { payment: modulationPayment.value, fromMonth: (modulationAfterMonths.value || 0) + 1 }
+    : null
+}))
+const hasEvents = computed(() => Boolean(events.value.earlyRepayment || events.value.modulation))
+
+const insurance = computed(() => ({
+  insuranceRate: insuranceRate.value,
+  insuranceMode: insuranceMode.value,
+  insuranceQuota: insuranceQuota.value
+}))
+
 // Le tableau est la source de tous les totaux : il porte l'assurance de chaque échéance,
-// qu'elle soit fixe (capital initial) ou dégressive (capital restant dû).
+// qu'elle soit fixe (capital initial) ou dégressive (capital restant dû), et les événements du prêt.
 const amortizationTable = computed(() =>
-  generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value, {
-    insuranceRate: insuranceRate.value,
-    insuranceMode: insuranceMode.value,
-    insuranceQuota: insuranceQuota.value
-  })
+  generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value, insurance.value, events.value)
+)
+
+// Le même prêt sans événement : sert de référence pour chiffrer leur effet
+const baselineTable = computed(() =>
+  hasEvents.value
+    ? generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value, insurance.value)
+    : amortizationTable.value
 )
 
 const sumOf = (key) => Math.round(amortizationTable.value.reduce((sum, row) => sum + row[key], 0) * 100) / 100
@@ -295,13 +382,43 @@ const totalPayments = computed(() =>
 // Frais payés au départ, hors mensualités
 const upfrontFees = computed(() => (applicationFees.value || 0) + (guaranteeFees.value || 0))
 
+const totalPenalty = computed(() => sumOf('penalty'))
+
 const creditCost = computed(() =>
-  Math.round((totalInterest.value + totalInsurance.value + upfrontFees.value) * 100) / 100
+  Math.round((totalInterest.value + totalInsurance.value + upfrontFees.value + totalPenalty.value) * 100) / 100
 )
 
+// Tout ce qui est versé chaque mois compte dans le TAEG, remboursement anticipé et indemnités compris
 const taeg = computed(() =>
-  calculateTAEG(principal.value, upfrontFees.value, amortizationTable.value.map(row => row.totalPayment))
+  calculateTAEG(
+    principal.value,
+    upfrontFees.value,
+    amortizationTable.value.map(row => row.totalPayment + row.extraPayment + row.penalty)
+  )
 )
+
+// Effet des événements par rapport au prêt de référence
+const eventsEffect = computed(() => {
+  if (!hasEvents.value || !amortizationTable.value.length) return null
+  const rows = amortizationTable.value
+  const cost = (table) => table.reduce((sum, row) => sum + row.interestPart + row.insurancePart, 0)
+  const saving = Math.round((cost(baselineTable.value) - cost(rows)) * 100) / 100
+  // Mensualité de crédit une fois tous les événements passés (si le prêt n'est pas déjà soldé)
+  const lastEvent = Math.max(events.value.earlyRepayment?.afterMonth ?? 0, (events.value.modulation?.fromMonth ?? 1) - 1)
+  const after = rows[lastEvent]
+  const newPayment = after && after.number < rows.length && after.payment !== rows[0].payment ? after.payment : null
+  // La mensualité modulée ne dépasse pas les intérêts : le capital ne baisse plus
+  const modulated = events.value.modulation && rows[events.value.modulation.fromMonth - 1]
+  return {
+    endLabel: formatDate(rows.at(-1).date),
+    monthsDelta: rows.length - baselineTable.value.length,
+    newPayment,
+    saving,
+    penalty: totalPenalty.value,
+    net: Math.round((saving - totalPenalty.value) * 100) / 100,
+    notAmortizing: Boolean(modulated && modulated.payment <= modulated.interestPart && rows.length > 1)
+  }
+})
 
 // Seuil d'usure : celui saisi, sinon celui du trimestre embarqué pour la durée du prêt
 const embeddedUsury = computed(() => usuryRateFor(months.value || 0))
