@@ -24,7 +24,7 @@
     <template v-else>
       <p class="figure text-xl text-ink mt-1">{{ formatEuros(result.maxPrice) }}</p>
       <p v-if="result.feesExceedBudget" class="notice notice-warn mt-3">
-        Les frais d'agence dépassent à eux seuls votre budget (capacité d'emprunt et apport).
+        Les frais d'agence et les travaux dépassent à eux seuls votre budget (capacité d'emprunt et apport).
       </p>
     </template>
 
@@ -33,8 +33,8 @@
       <FundingBar class="mt-5" title="Besoins" :total="needs" :scale="scale" :segments="needSegments">
         <template #info-notary>
           <InfoTooltip
-            principe="Frais d'acquisition non finançables par le crédit, calculés sur le prix hors frais d'agence"
-            :calcul="`${formatEuros(result.maxPrice)} × ${notaryRateLabel}`"
+            principe="Frais d'acquisition non finançables par le crédit, calculés au barème sur le prix hors frais d'agence"
+            :calcul="notaryDetail"
           />
         </template>
       </FundingBar>
@@ -49,7 +49,8 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatEuros, formatPercent, NOTARY_FEES } from '../services/loanCalculator.js'
+import { formatEuros, formatPercent } from '../services/loanCalculator.js'
+import { calculateNotaryFees, describeNotaryFees } from '../services/notaryFees.js'
 import FundingBar from './FundingBar.vue'
 import InfoTooltip from './InfoTooltip.vue'
 
@@ -61,13 +62,17 @@ const props = defineProps({
   personalContribution: { type: Number, default: 0 },
   agencyFees: { type: Number, default: 0 },
   agencyFeesMode: { type: String, default: '€' },
-  propertyType: { type: String, default: 'ancien' }
+  propertyType: { type: String, default: 'ancien' },
+  dmtoRate: { type: String, default: 'majore' }
 })
 
-const notaryRateLabel = computed(() => formatPercent(NOTARY_FEES[props.propertyType] * 100))
+// Détail des frais de notaire au prix retenu (info-bulle et taux effectif du libellé)
+const notary = computed(() => calculateNotaryFees(props.result.maxPrice, props.propertyType, props.dmtoRate))
+const notaryRateLabel = computed(() => `≈ ${formatPercent(Math.round(notary.value.effectiveRate * 10) / 10)}`)
+const notaryDetail = computed(() => describeNotaryFees(notary.value))
 
 const needs = computed(() =>
-  Math.round((props.result.maxPrice + props.result.agencyFees + props.result.notaryFees) * 100) / 100
+  Math.round((props.result.maxPrice + props.result.agencyFees + props.result.works + props.result.notaryFees) * 100) / 100
 )
 
 const resources = computed(() =>
@@ -79,6 +84,7 @@ const scale = computed(() => Math.max(needs.value, resources.value))
 const needSegments = computed(() => [
   { key: 'price', label: 'Prix du bien', value: props.result.maxPrice, color: 'capital', group: 'Finançable par le prêt' },
   { key: 'agency', label: 'Frais d\'agence', value: props.result.agencyFees, color: 'capital', group: 'Finançable par le prêt' },
+  { key: 'works', label: 'Travaux', value: props.result.works, color: 'capital', group: 'Finançable par le prêt' },
   { key: 'notary', label: `Frais de notaire (${notaryRateLabel.value})`, value: props.result.notaryFees, color: 'apport', group: 'À payer avec l\'apport' }
 ])
 
@@ -87,32 +93,23 @@ const resourceSegments = computed(() => [
   { key: 'apport', label: 'Apport', value: props.personalContribution, color: 'apport', always: true }
 ])
 
-// Tooltip "Prix du bien" : affiche la formule qui a déterminé le résultat
+// Tooltip « Prix du bien » : dit quelle contrainte a déterminé le résultat.
+// Les frais de notaire suivent un barème : le prix est le plus élevé qui respecte la contrainte.
 const priceTooltip = computed(() => {
   const r = props.result
-  const isC2Binding = r.c2 <= r.c1
-
-  if (isC2Binding) {
+  if (r.c2 <= r.c1) {
     return {
-      principe: 'Limité par l\'apport (frais de notaire)',
-      calcul: `${formatEuros(props.personalContribution)} ÷ ${notaryRateLabel.value} = ${formatEuros(r.maxPrice)}`
+      principe: 'Limité par l\'apport, qui doit couvrir les frais de notaire',
+      calcul: `Frais de notaire pour ${formatEuros(r.maxPrice)} : ${formatEuros(r.notaryFees)}`
     }
   }
-
-  const c1BaseLabel = `${formatEuros(props.borrowingCapacity)} + ${formatEuros(props.personalContribution)}`
-  let diviseur
-  if (props.agencyFeesMode === '%' && props.agencyFees) {
-    diviseur = `(1 + ${notaryRateLabel.value} + ${formatPercent(props.agencyFees)})`
-  } else {
-    diviseur = `(1 + ${notaryRateLabel.value})`
-  }
-  const budgetDisplay = props.agencyFeesMode === '€' && props.agencyFees
-    ? `(${c1BaseLabel} − ${formatEuros(props.agencyFees)})`
-    : c1BaseLabel
-
+  const others = [
+    r.agencyFees > 0 ? ` − ${formatEuros(r.agencyFees)} d'agence` : '',
+    r.works > 0 ? ` − ${formatEuros(r.works)} de travaux` : ''
+  ].join('')
   return {
-    principe: 'Budget total ÷ frais inclusifs',
-    calcul: `${budgetDisplay} ÷ ${diviseur} = ${formatEuros(r.maxPrice)}`
+    principe: 'Le budget (capacité d\'emprunt et apport) moins les frais',
+    calcul: `${formatEuros(props.borrowingCapacity)} + ${formatEuros(props.personalContribution)} − ${formatEuros(r.notaryFees)} de notaire${others}`
   }
 })
 </script>

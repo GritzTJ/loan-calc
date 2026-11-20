@@ -72,9 +72,14 @@
         <template #help>{{ AGENCY_FEES_HELP }}</template>
       </FormField>
 
-      <FormField v-slot="{ labelId }" class="sm:col-span-2 lg:col-span-1" label="Type de bien" group>
-        <SegmentedControl v-model="propertyType" :aria-labelledby="labelId" :options="PROPERTY_TYPES" />
+      <FormField label="Travaux prévus" hint="(optionnel)">
+        <template #default="{ id }">
+          <NumberInput :id="id" v-model="works" suffix="€" placeholder="0" />
+        </template>
+        <template #help>Finançables par le prêt : ils réduisent d'autant le prix accessible.</template>
       </FormField>
+
+      <NotaryRateField v-model:property-type="propertyType" v-model:dmto-rate="dmtoRate" />
     </template>
 
     <template #result>
@@ -120,6 +125,7 @@
           :agency-fees="agencyFees || 0"
           :agency-fees-mode="agencyFeesMode"
           :property-type="propertyType"
+          :dmto-rate="dmtoRate"
         />
       </template>
     </template>
@@ -140,9 +146,9 @@ import {
   sanitizeMonths,
   MAX_RATE,
   AGENCY_FEES_HELP,
-  AGENCY_FEES_MODES,
-  PROPERTY_TYPES
+  AGENCY_FEES_MODES
 } from '../services/loanCalculator.js'
+import { DEFAULT_DMTO } from '../services/notaryFees.js'
 import { usePersistedState } from '../composables/usePersistedState.js'
 import { useSavedSimulation } from '../composables/useSavedSimulation.js'
 import CalculatorLayout from './CalculatorLayout.vue'
@@ -150,6 +156,7 @@ import DurationField from './DurationField.vue'
 import FormField from './FormField.vue'
 import InfoTooltip from './InfoTooltip.vue'
 import InsuranceField from './InsuranceField.vue'
+import NotaryRateField from './NotaryRateField.vue'
 import NumberInput from './NumberInput.vue'
 import PropertyPrice from './PropertyPrice.vue'
 import SaveSimulation from './SaveSimulation.vue'
@@ -187,14 +194,16 @@ const DEFAULTS = {
   personalContribution: 25000,
   agencyFees: null,
   agencyFeesMode: '€',
-  propertyType: 'ancien'
+  works: null,
+  propertyType: 'ancien',
+  dmtoRate: DEFAULT_DMTO
 }
 
 // --- State --- (saisie conservée d'une visite à l'autre)
 const { state, reset } = usePersistedState('capacity', DEFAULTS)
 const {
   inputMode, monthlyIncome, monthlyCharges, debtRatio, directPayment, months, annualRate,
-  insuranceRate, insuranceMode, insuranceQuota, personalContribution, agencyFees, agencyFeesMode, propertyType
+  insuranceRate, insuranceMode, insuranceQuota, personalContribution, agencyFees, agencyFeesMode, works, propertyType, dmtoRate
 } = toRefs(state)
 
 const { current, save, update } = useSavedSimulation('capacity', () => {
@@ -208,7 +217,9 @@ const { current, save, update } = useSavedSimulation('capacity', () => {
     personalContribution: personalContribution.value,
     agencyFees: agencyFees.value,
     agencyFeesMode: agencyFeesMode.value,
-    propertyType: propertyType.value
+    works: works.value,
+    propertyType: propertyType.value,
+    dmtoRate: dmtoRate.value
   }
   if (inputMode.value === 'income') {
     params.monthlyIncome = monthlyIncome.value
@@ -241,6 +252,9 @@ watch(() => props.loadParams, (p) => {
     agencyFees.value = p.agencyFees ?? null
     agencyFeesMode.value = p.agencyFeesMode ?? '€'
     propertyType.value = p.propertyType ?? 'ancien'
+    // Absents avant la v2.6.5
+    works.value = p.works ?? null
+    dmtoRate.value = p.dmtoRate ?? DEFAULT_DMTO
   }
   current.value = p.source ?? null
 }, { immediate: true })
@@ -290,7 +304,8 @@ const priceResult = computed(() =>
     personalContribution.value || 0,
     propertyType.value,
     agencyFees.value || 0,
-    agencyFeesMode.value
+    agencyFeesMode.value,
+    { dmtoRate: dmtoRate.value, works: works.value || 0 }
   )
 )
 

@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.6.4**
+Simulateur de prêt immobilier — usage personnel — **v2.6.5**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -167,23 +167,26 @@ frontend/
 
 - Les **frais de notaire** ne peuvent **pas** être financés par le crédit → doivent venir de l'apport
 - Les **frais d'agence** peuvent être financés par le crédit (prix FAI = prix net vendeur + agence)
-- **Prix max du bien** = `min(C1, C2)` avec :
-  - `C1 (budget)` = `(borrowingCapacity + apport) / (1 + notaryRate [+ agencyRate%])`
-  - `C2 (apport)` = `apport / notaryRate`
-- Taux notaire : **ancien = 8 %**, **neuf = 3 %**
-- Les **frais de dossier** ne peuvent **pas** être financés par le crédit → apport, comme le notaire (`fundingGap = notaire + dossier − apport`)
-- **Apport pour utiliser toute la capacité** (`minApportNeeded`) = point où C1 = C2 : `notaryRate × (capacité − agence€)` ou `notaryRate × capacité / (1 + agencyRate%)`. Ne pas le calculer comme `notaryRate × C1` (C1 dépend de l'apport)
+- **Frais de notaire au barème** (`services/notaryFees.js`, depuis v2.6.5) : droits de mutation (ancien : 6,32 % majoré par défaut, 5,81 % normal, 5,09 % réduit ; neuf : 0,715 %) + émoluments par tranches TTC + contribution de sécurité immobilière + 1 200 € de formalités estimées. Calculés sur le prix net vendeur. Recoupés avec le simulateur de service-public (250 000 € ancien majoré ≈ 20 120 €)
+- **Prix max du bien** = `min(C1, C2)`, chaque contrainte étant résolue numériquement (`largestWhere`) car les frais ne sont plus proportionnels au prix, puis arrondie à l'euro inférieur :
+  - `C1 (budget)` : `prix + agence + travaux + notaire(prix) ≤ capacité + apport`
+  - `C2 (apport)` : `notaire(prix) ≤ apport`
+- Les **travaux** sont finançables par le crédit, comme les frais d'agence
+- Les **frais de dossier et de garantie** ne peuvent **pas** être financés par le crédit → apport, comme le notaire (`fundingGap = notaire + dossier + garantie − apport`)
+- **Apport pour utiliser toute la capacité** (`minApportNeeded`) = frais de notaire du prix où le prêt finance exactement prix FAI + travaux (`fullCapacityPrice`). Ce seuil ne dépend pas de l'apport saisi
 - **Capacité avec assurance** : le budget mensuel couvre crédit + assurance → `capital = budget / (k + tauxAssurance/1200)`, `k` = mensualité par euro emprunté
 - **Assurance** : deux bases (`insuranceMode`) — `initial` (cotisation fixe sur le capital emprunté, contrat groupe) ou `crd` (sur le capital restant dû, dégressive, délégation). Le premier mois est identique dans les deux modes, donc la capacité d'emprunt ne dépend pas du mode. Absent d'une ancienne simulation = `initial`
 - **Tableau d'amortissement** = source de tous les totaux (intérêts, assurance). La part de capital est plafonnée au restant dû et le tableau s'arrête quand le prêt est soldé : il peut compter moins de lignes que la durée saisie
-- **Frais de notaire** calculés sur le prix net vendeur (honoraires d'agence à la charge de l'acquéreur) ; à la charge du vendeur, on saisit le prix affiché sans frais d'agence (dit dans l'aide du champ)
+- Honoraires d'agence supposés à la charge de l'acquéreur ; à la charge du vendeur, on saisit le prix affiché sans frais d'agence (dit dans l'aide du champ)
+- **TAEG** (`calculateTAEG`) : méthode actuarielle sur les échéances du tableau, frais de dossier et de garantie déduits du capital reçu. **Seuils d'usure** dans `services/usury.js`, **à mettre à jour chaque trimestre** (l'app signale une valeur périmée)
+- **Quotité d'assurance** : multiplie le taux (`effectiveInsuranceRate`), 100 % par défaut
 - Taux plafonnés à 30 % (`MAX_RATE`)
 - **Types de simulation** : `loan`, `capacity`, `project` (`SIMULATION_TYPES` dans `backend/db.js`). En ajouter un déclenche la reconstruction de la table au démarrage (SQLite ne modifie pas un `CHECK`)
 - Tous les onglets sont sous `<KeepAlive>` : la saisie est conservée quand on change d'onglet
 
 ## Branches Git
 
-- `main` — version stable (v2.6.4)
+- `main` — version stable (v2.6.5)
 
 ## PWA
 

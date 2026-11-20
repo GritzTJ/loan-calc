@@ -16,6 +16,17 @@ import {
   formatEuros,
   MAX_LOAN_MONTHS
 } from './loanCalculator.js'
+import { calculateNotaryFees } from './notaryFees.js'
+
+// Les règles du plan de financement (C1, C2, apport nécessaire…) se vérifient avec des frais de notaire
+// proportionnels, dont les résultats se calculent à la main : 8 % dans l'ancien, 3 % dans le neuf.
+// Le barème réel est testé dans notaryFees.test.js, et son branchement plus bas.
+const FLAT_NOTARY = { ancien: 0.08, neuf: 0.03 }
+const flat = (type) => ({ notaryFeesOf: (price) => Math.round(price * FLAT_NOTARY[type] * 100) / 100 })
+const maxPriceFlat = (capacity, apport, type, fees = 0, mode = '€', options = {}) =>
+  calculateMaxPropertyPrice(capacity, apport, type, fees, mode, { ...flat(type), ...options })
+const loanAmountFlat = (price, type, fees = 0, mode = '€', apport = 0, dossier = 0, garantie = 0, options = {}) =>
+  calculateLoanAmount(price, type, fees, mode, apport, dossier, garantie, { ...flat(type), ...options })
 
 describe('calculateMonthlyPayment', () => {
   it('calcule la mensualité d\'un prêt à taux fixe', () => {
@@ -117,87 +128,88 @@ describe('calculateBorrowingCapacity', () => {
 describe('calculateMaxPropertyPrice', () => {
   it('retient min(C1, C2)', () => {
     // Apport confortable : c'est le budget (C1) qui limite
-    const byBudget = calculateMaxPropertyPrice(200000, 50000, 'ancien')
-    expect(byBudget.c1).toBe(231481.48)
+    const byBudget = maxPriceFlat(200000, 50000, 'ancien')
+    // Prix arrondi à l'euro inférieur : 250 000 / 1,08 = 231 481,48
+    expect(byBudget.c1).toBe(231481)
     expect(byBudget.maxPrice).toBe(byBudget.c1)
     expect(byBudget.isApportConstrained).toBe(false)
 
     // Apport faible : c'est l'apport (C2 = apport / taux notaire) qui limite
-    const byApport = calculateMaxPropertyPrice(200000, 8000, 'ancien')
+    const byApport = maxPriceFlat(200000, 8000, 'ancien')
     expect(byApport.c2).toBe(100000)
     expect(byApport.maxPrice).toBe(100000)
     expect(byApport.isApportConstrained).toBe(true)
   })
 
   it('applique 8 % de notaire dans l\'ancien et 3 % dans le neuf', () => {
-    expect(calculateMaxPropertyPrice(200000, 50000, 'ancien').notaryFees).toBeCloseTo(231481.48 * 0.08, 2)
-    const neuf = calculateMaxPropertyPrice(200000, 50000, 'neuf')
-    expect(neuf.maxPrice).toBe(242718.45)
-    expect(neuf.notaryFees).toBeCloseTo(242718.45 * 0.03, 2)
+    expect(maxPriceFlat(200000, 50000, 'ancien').notaryFees).toBeCloseTo(231481 * 0.08, 2)
+    const neuf = maxPriceFlat(200000, 50000, 'neuf')
+    expect(neuf.maxPrice).toBe(242718)
+    expect(neuf.notaryFees).toBeCloseTo(242718 * 0.03, 2)
   })
 
   it('inclut les frais d\'agence en % dans C1', () => {
-    const r = calculateMaxPropertyPrice(200000, 50000, 'ancien', 5, '%')
-    expect(r.c1).toBe(221238.94) // 250 000 / (1 + 0,08 + 0,05)
-    expect(r.agencyFees).toBeCloseTo(221238.94 * 0.05, 2)
+    const r = maxPriceFlat(200000, 50000, 'ancien', 5, '%')
+    expect(r.c1).toBe(221238) // 250 000 / (1 + 0,08 + 0,05)
+    expect(r.agencyFees).toBeCloseTo(221238 * 0.05, 2)
   })
 
   it('retire les frais d\'agence fixes du budget', () => {
-    const r = calculateMaxPropertyPrice(200000, 50000, 'ancien', 10000, '€')
-    expect(r.c1).toBe(222222.22) // (250 000 − 10 000) / 1,08
+    const r = maxPriceFlat(200000, 50000, 'ancien', 10000, '€')
+    expect(r.c1).toBe(222222) // (250 000 − 10 000) / 1,08
   })
 
   // L'apport qui permet d'utiliser toute la capacité est un seuil fixe :
   // il ne doit pas dépendre de l'apport déjà saisi.
   it('annonce un apport nécessaire stable, quel que soit l\'apport saisi', () => {
-    expect(calculateMaxPropertyPrice(200000, 0, 'ancien').minApportNeeded).toBe(16000)
-    expect(calculateMaxPropertyPrice(200000, 14814.82, 'ancien').minApportNeeded).toBe(16000)
-    expect(calculateMaxPropertyPrice(200000, 16000, 'ancien').isApportConstrained).toBe(false)
+    expect(maxPriceFlat(200000, 0, 'ancien').minApportNeeded).toBe(16000)
+    expect(maxPriceFlat(200000, 14814.82, 'ancien').minApportNeeded).toBe(16000)
+    expect(maxPriceFlat(200000, 16000, 'ancien').isApportConstrained).toBe(false)
   })
 
   // Quand l'apport limite le prix, le prêt ne finance que le prix FAI : le reste de la capacité est inutilisé
   it('indique le prêt réellement utilisé et la capacité restante', () => {
-    const byBudget = calculateMaxPropertyPrice(200000, 50000, 'ancien')
+    const byBudget = maxPriceFlat(200000, 50000, 'ancien')
     expect(byBudget.loanUsed).toBe(200000)
     expect(byBudget.unusedCapacity).toBe(0)
 
-    const byApport = calculateMaxPropertyPrice(200000, 8000, 'ancien')
+    const byApport = maxPriceFlat(200000, 8000, 'ancien')
     expect(byApport.loanUsed).toBe(100000)
     expect(byApport.unusedCapacity).toBe(100000)
 
-    const withAgency = calculateMaxPropertyPrice(200000, 8000, 'ancien', 5, '%')
+    const withAgency = maxPriceFlat(200000, 8000, 'ancien', 5, '%')
     expect(withAgency.loanUsed).toBe(105000) // prix 100 000 + agence 5 000
     expect(withAgency.unusedCapacity).toBe(95000)
   })
 
   it('tient compte des frais d\'agence dans l\'apport nécessaire', () => {
-    expect(calculateMaxPropertyPrice(200000, 0, 'ancien', 10000, '€').minApportNeeded).toBe(15200)
-    expect(calculateMaxPropertyPrice(200000, 0, 'ancien', 5, '%').minApportNeeded).toBe(15238.1)
+    expect(maxPriceFlat(200000, 0, 'ancien', 10000, '€').minApportNeeded).toBe(15200)
+    expect(maxPriceFlat(200000, 0, 'ancien', 5, '%').minApportNeeded).toBe(15238.1)
   })
 })
 
 describe('calculateLoanAmount', () => {
   it('finance les frais d\'agence mais pas les frais de notaire', () => {
-    const r = calculateLoanAmount(300000, 'ancien', 15000, '€', 24000)
+    const r = loanAmountFlat(300000, 'ancien', 15000, '€', 24000)
     expect(r.notaryFees).toBe(24000)
     expect(r.loanAmount).toBe(315000) // prix FAI
     expect(r.fundingGap).toBe(0)
   })
 
   it('signale l\'apport manquant pour les frais de notaire', () => {
-    const r = calculateLoanAmount(300000, 'ancien', 0, '€', 20000)
+    const r = loanAmountFlat(300000, 'ancien', 0, '€', 20000)
     expect(r.loanAmount).toBe(300000)
     expect(r.fundingGap).toBe(4000)
   })
 
   it('traite les frais de dossier comme non finançables', () => {
-    const r = calculateLoanAmount(300000, 'ancien', 0, '€', 24500, 1000)
+    const r = loanAmountFlat(300000, 'ancien', 0, '€', 24500, 1000)
     expect(r.loanAmount).toBe(300000)
     expect(r.fundingGap).toBe(500)
   })
 
   it('réduit le prêt quand l\'apport dépasse les frais', () => {
-    const r = calculateLoanAmount(300000, 'ancien', 0, '€', 74000)
+    const r = loanAmountFlat(300000, 'ancien', 0, '€', 74000)
     expect(r.loanAmount).toBe(250000)
     expect(r.fundingGap).toBe(0)
   })
@@ -270,7 +282,7 @@ describe('tableau d\'amortissement : cas limites et assurance', () => {
 
 describe('cas limites du plan de financement', () => {
   it('capacité : des frais d\'agence fixes supérieurs au budget ne laissent rien à emprunter', () => {
-    const r = calculateMaxPropertyPrice(80000, 5000, 'ancien', 500000, '€')
+    const r = maxPriceFlat(80000, 5000, 'ancien', 500000, '€')
     expect(r.maxPrice).toBe(0)
     expect(r.loanUsed).toBe(0)
     expect(r.agencyFees).toBe(0)
@@ -279,14 +291,14 @@ describe('cas limites du plan de financement', () => {
 
   it('capacité : fullCapacityPrice est le prix atteint quand l\'apport vaut minApportNeeded', () => {
     for (const [fees, mode] of [[0, '€'], [9000, '€'], [4, '%']]) {
-      const r = calculateMaxPropertyPrice(200000, 0, 'ancien', fees, mode)
-      const atThreshold = calculateMaxPropertyPrice(200000, r.minApportNeeded, 'ancien', fees, mode)
-      expect(Math.abs(atThreshold.maxPrice - r.fullCapacityPrice)).toBeLessThan(0.5)
+      const r = maxPriceFlat(200000, 0, 'ancien', fees, mode)
+      const atThreshold = maxPriceFlat(200000, r.minApportNeeded, 'ancien', fees, mode)
+      expect(Math.abs(atThreshold.maxPrice - r.fullCapacityPrice)).toBeLessThan(1.5)
     }
   })
 
   it('projet : un apport supérieur au coût total laisse un excédent', () => {
-    const r = calculateLoanAmount(150000, 'ancien', 0, '€', 400000, 0)
+    const r = loanAmountFlat(150000, 'ancien', 0, '€', 400000, 0)
     expect(r.loanAmount).toBe(0)
     expect(r.totalCost).toBe(162000)
     expect(r.surplus).toBe(238000)
@@ -294,7 +306,7 @@ describe('cas limites du plan de financement', () => {
   })
 
   it('projet : pas d\'excédent quand l\'apport est entièrement utilisé', () => {
-    const r = calculateLoanAmount(300000, 'ancien', 0, '€', 30000, 0)
+    const r = loanAmountFlat(300000, 'ancien', 0, '€', 30000, 0)
     expect(r.surplus).toBe(0)
     expect(r.contributionUsed).toBe(30000)
   })
@@ -352,10 +364,65 @@ describe('quotité d\'assurance', () => {
 
 describe('projet : frais de garantie', () => {
   it('s\'ajoutent au coût et se paient avec l\'apport', () => {
-    const r = calculateLoanAmount(300000, 'ancien', 0, '€', 24000, 1000, 3000)
+    const r = loanAmountFlat(300000, 'ancien', 0, '€', 24000, 1000, 3000)
     expect(r.totalCost).toBe(328000)
     expect(r.loanAmount).toBe(300000)
     expect(r.fundingGap).toBe(4000)
     expect(r.guaranteeFees).toBe(3000)
+  })
+})
+
+describe('plan de financement au barème réel et travaux', () => {
+  it('capacité : le prix maximal respecte les deux contraintes avec le barème', () => {
+    for (const apport of [0, 5000, 16000, 25000, 80000]) {
+      for (const [type, dmto] of [['ancien', 'majore'], ['ancien', 'normal'], ['neuf', undefined]]) {
+        const r = calculateMaxPropertyPrice(240000, apport, type, 9000, '€', { dmtoRate: dmto, works: 15000 })
+        const notary = calculateNotaryFees(r.maxPrice, type, dmto).total
+        expect(r.notaryFees).toBe(notary)
+        expect(notary).toBeLessThanOrEqual(apport + 0.01)
+        const needs = r.maxPrice + r.agencyFees + r.works + notary
+        expect(needs).toBeLessThanOrEqual(240000 + apport + 0.01)
+        // Budget entièrement utilisé quand l'apport ne limite pas
+        // (à l'euro près : le prix est arrondi à l'euro inférieur)
+        if (!r.isApportConstrained && r.maxPrice > 0) expect(240000 + apport - needs).toBeLessThan(2)
+        expect(r.loanUsed).toBeLessThanOrEqual(240000)
+      }
+    }
+  })
+
+  it('capacité : au seuil d\'apport nécessaire, toute la capacité est utilisée', () => {
+    const r = calculateMaxPropertyPrice(240000, 0, 'ancien', 5, '%', { works: 10000 })
+    const atThreshold = calculateMaxPropertyPrice(240000, r.minApportNeeded, 'ancien', 5, '%', { works: 10000 })
+    expect(atThreshold.isApportConstrained).toBe(false)
+    expect(Math.abs(atThreshold.maxPrice - r.fullCapacityPrice)).toBeLessThan(1)
+    expect(atThreshold.unusedCapacity).toBe(0)
+  })
+
+  it('capacité : sans apport, aucun bien n\'est accessible (les frais de notaire ne sont jamais nuls)', () => {
+    const r = calculateMaxPropertyPrice(240000, 0, 'ancien')
+    expect(r.maxPrice).toBe(0)
+    expect(r.loanUsed).toBe(0)
+  })
+
+  it('capacité : les travaux réduisent le prix accessible', () => {
+    const without = calculateMaxPropertyPrice(240000, 40000, 'ancien')
+    const withWorks = calculateMaxPropertyPrice(240000, 40000, 'ancien', 0, '€', { works: 30000 })
+    expect(withWorks.maxPrice).toBeLessThan(without.maxPrice - 25000)
+    expect(withWorks.works).toBe(30000)
+  })
+
+  it('projet : les travaux sont finançables par le prêt, pas les frais de notaire', () => {
+    const notary = calculateNotaryFees(250000, 'ancien').total
+    const r = calculateLoanAmount(250000, 'ancien', 10000, '€', notary, 0, 0, { works: 30000 })
+    expect(r.notaryFees).toBe(notary)
+    expect(r.loanAmount).toBe(290000) // prix + agence + travaux
+    expect(r.fundingGap).toBe(0)
+    expect(r.totalCost).toBe(Math.round((290000 + notary) * 100) / 100)
+  })
+
+  it('projet : le taux de mutation choisi change les frais', () => {
+    const majore = calculateLoanAmount(250000, 'ancien', 0, '€', 0, 0, 0, { dmtoRate: 'majore' })
+    const normal = calculateLoanAmount(250000, 'ancien', 0, '€', 0, 0, 0, { dmtoRate: 'normal' })
+    expect(majore.notaryFees - normal.notaryFees).toBeCloseTo(250000 * (6.3185 - 5.80665) / 100, 1)
   })
 })

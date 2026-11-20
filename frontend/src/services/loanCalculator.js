@@ -3,6 +3,8 @@
  * Fonctions pures, sans dépendance UI, réutilisables côté serveur en v2.
  */
 
+import { calculateNotaryFees } from './notaryFees.js'
+
 /**
  * Calcule la mensualité d'un prêt à taux fixe (amortissement constant).
  * Formule : M = C × t / (1 − (1 + t)^(−n))
@@ -213,16 +215,10 @@ export function sanitizeMonths(months) {
   return Math.min(MAX_LOAN_MONTHS, Math.max(0, Math.round(months)))
 }
 
-// Taux de frais de notaire selon le type de bien
-export const NOTARY_FEES = {
-  ancien: 0.08, // 8%
-  neuf: 0.03    // 3%
-}
-
 // Choix proposés dans les formulaires (Capacité et Projet)
 export const PROPERTY_TYPES = [
-  { value: 'ancien', label: 'Ancien (8 %)' },
-  { value: 'neuf', label: 'Neuf (3 %)' }
+  { value: 'ancien', label: 'Ancien' },
+  { value: 'neuf', label: 'Neuf' }
 ]
 // Hypothèse de calcul des frais de notaire, à dire à l'utilisateur : ils portent sur le prix net vendeur
 // quand les honoraires d'agence sont à la charge de l'acquéreur. À la charge du vendeur, ils portent sur
@@ -233,97 +229,103 @@ export const AGENCY_FEES_MODES = [
   { value: '%', label: '% du prix' }
 ]
 
+const roundCents = (x) => Math.round(x * 100) / 100
+
+// Plus grand x de [0, max] vérifiant une condition vraie en dessous d'un seuil et fausse au-dessus.
+// Sert à inverser les frais de notaire, qui ne sont plus proportionnels au prix (barème par tranches).
+function largestWhere(max, holds) {
+  if (max < 1 || !holds(1)) return 0
+  if (holds(max)) return Math.floor(max)
+  let low = 1
+  let high = max
+  for (let step = 0; step < 60; step++) {
+    const mid = (low + high) / 2
+    if (holds(mid)) low = mid
+    else high = mid
+  }
+  // Arrondi à l'euro inférieur : un prix se négocie à l'euro, et le prix retenu respecte toujours la condition
+  return Math.floor(low)
+}
+
 /**
  * Calcule le prix maximal du bien accessible.
- * Les frais d'agence (FAA) peuvent être financés par le crédit — le prêt peut couvrir
- * prix net vendeur + frais d'agence (= prix FAI).
- * Seuls les frais de notaire doivent être couverts par l'apport (non finançables).
+ *
+ * Le prêt peut financer le prix net vendeur, les frais d'agence (prix FAI) et les travaux.
+ * Les frais de notaire ne sont pas finançables : ils doivent être couverts par l'apport.
  *
  * Deux contraintes indépendantes s'appliquent :
- *   C1 (budget) : (crédit + apport) / (1 + frais)
- *   C2 (apport/notaire) : prix ≤ apport / tauxNotaire
+ *   C1 (budget) : prix + agence + travaux + notaire(prix) ≤ capacité + apport
+ *   C2 (apport) : notaire(prix) ≤ apport
  *   → prix = min(C1, C2)
+ * Les frais de notaire suivant un barème, chaque contrainte est résolue numériquement.
  *
  * @param {number} borrowingCapacity      - Capital empruntable (€)
  * @param {number} personalContribution   - Apport personnel (€)
  * @param {'ancien'|'neuf'} propertyType  - Type de bien
  * @param {number} agencyFees             - Frais d'agence : montant € ou taux %
  * @param {'€'|'%'} agencyFeesMode        - Mode de saisie des frais d'agence
- * @returns {{ maxPrice, notaryFees, totalBudget, agencyFees, isApportConstrained, minApportNeeded, c1, c2 }}
- *   c1 / c2 : valeurs des deux contraintes (exposées pour les tooltips)
+ * @param {{ dmtoRate?: string, works?: number, notaryFeesOf?: (price: number) => number }} [options]
+ *   dmtoRate : droits de mutation (ancien) ; works : enveloppe travaux (€) ;
+ *   notaryFeesOf : fonction de frais de notaire de remplacement (tests)
+ * @returns {{ maxPrice, notaryFees, totalBudget, agencyFees, works, isApportConstrained, minApportNeeded, c1, c2,
+ *   loanUsed, unusedCapacity, fullCapacityPrice, feesExceedBudget }}
+ *   c1 / c2 : prix maximal selon chaque contrainte
  *   minApportNeeded : apport à partir duquel toute la capacité d'emprunt est utilisable
- *   loanUsed / unusedCapacity : part de la capacité réellement empruntée, et le reste
  *   fullCapacityPrice : prix accessible si l'apport atteignait minApportNeeded
- *   feesExceedBudget : les frais d'agence fixes dépassent tout le budget
+ *   loanUsed / unusedCapacity : part de la capacité réellement empruntée, et le reste
+ *   feesExceedBudget : frais d'agence fixes et travaux dépassent tout le budget
  */
-export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€') {
-  const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
+export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€', options = {}) {
+  const notaryFeesOf = options.notaryFeesOf ?? ((price) => calculateNotaryFees(price, propertyType, options.dmtoRate).total)
+  const works = options.works || 0
   const totalBudget = borrowingCapacity + personalContribution
-  const c1Base = totalBudget
 
-  let maxPrice, agencyFeesAmount, c1, c2, minApportNeeded
+  const agencyRate = agencyFeesMode === '%' ? (agencyFees || 0) / 100 : 0
+  const fixedAgency = agencyFeesMode === '%' ? 0 : (agencyFees || 0)
+  // Ce que le prêt peut financer pour un prix donné : prix FAI + travaux
+  const loanable = (price) => price * (1 + agencyRate) + fixedAgency + works
 
-  // Apport nécessaire pour utiliser toute la capacité : c'est le point où C1 = C2,
-  // c.-à-d. où le prêt finance exactement le prix FAI et l'apport exactement le notaire.
-  // (Calculer « taux notaire × C1 » serait faux : C1 augmente lui-même avec l'apport.)
-  if (agencyFeesMode === '%') {
-    const agencyRate = (agencyFees || 0) / 100
-    // C1 (budget) : prix × (1 + notaryRate + agencyRate) ≤ c1Base
-    c1 = c1Base / (1 + notaryRate + agencyRate)
-    // C2 (apport) : l'apport couvre au minimum les frais de notaire (non finançables)
-    c2 = personalContribution / notaryRate
-    maxPrice = Math.max(0, Math.min(c1, c2))
-    agencyFeesAmount = Math.round(maxPrice * agencyRate * 100) / 100
-    minApportNeeded = notaryRate * borrowingCapacity / (1 + agencyRate)
-  } else {
-    agencyFeesAmount = agencyFees || 0
-    // C1 (budget) : prix × (1 + notaryRate) ≤ c1Base − frais d'agence fixes
-    c1 = Math.max(0, (c1Base - agencyFeesAmount) / (1 + notaryRate))
-    // C2 (apport) : l'apport couvre au minimum les frais de notaire (non finançables)
-    c2 = personalContribution / notaryRate
-    maxPrice = Math.max(0, Math.min(c1, c2))
-    minApportNeeded = Math.max(0, notaryRate * (borrowingCapacity - agencyFeesAmount))
-  }
+  // C1 (budget) : tout doit tenir dans capacité + apport
+  const c1 = largestWhere(totalBudget, (price) => loanable(price) + notaryFeesOf(price) <= totalBudget)
+  // C2 (apport) : l'apport couvre au minimum les frais de notaire
+  const c2 = largestWhere(Math.max(totalBudget, 1), (price) => notaryFeesOf(price) <= personalContribution)
+  const maxPrice = Math.min(c1, c2)
 
-  maxPrice = Math.round(maxPrice * 100) / 100
-  c1 = Math.round(c1 * 100) / 100
-  c2 = Math.round(c2 * 100) / 100
-  minApportNeeded = Math.round(minApportNeeded * 100) / 100
-
-  const notaryFees = Math.round(maxPrice * notaryRate * 100) / 100
+  // Apport nécessaire pour utiliser toute la capacité : le prêt finance alors exactement prix FAI + travaux,
+  // et l'apport exactement les frais de notaire. (Ce seuil ne dépend pas de l'apport saisi.)
+  const fullCapacityPrice = Math.max(0, roundCents((borrowingCapacity - fixedAgency - works) / (1 + agencyRate)))
+  const minApportNeeded = roundCents(notaryFeesOf(fullCapacityPrice))
   const isApportConstrained = personalContribution < minApportNeeded
 
+  const agencyFeesAmount = maxPrice > 0 ? roundCents(maxPrice * agencyRate + fixedAgency) : 0
+  const notaryFees = roundCents(notaryFeesOf(maxPrice))
+
   // Prêt réellement mobilisé : quand l'apport limite le prix, il ne couvre que les frais de notaire
-  // et le prêt finance exactement le prix FAI. Sinon toute la capacité est utilisée.
-  // Aucun bien accessible (ex. frais d'agence fixes supérieurs au budget) : rien n'est emprunté.
-  let loanUsed = isApportConstrained
-    ? Math.round((maxPrice + agencyFeesAmount) * 100) / 100
-    : borrowingCapacity
+  // et le prêt finance exactement prix FAI + travaux. Sinon toute la capacité est utilisée.
+  // Aucun bien accessible : rien n'est emprunté.
+  let loanUsed = isApportConstrained ? roundCents(loanable(maxPrice)) : borrowingCapacity
   if (maxPrice === 0) loanUsed = 0
-  const unusedCapacity = Math.round((borrowingCapacity - loanUsed) * 100) / 100
+  const unusedCapacity = roundCents(borrowingCapacity - loanUsed)
 
-  // Des frais d'agence fixes qui absorbent tout le budget : à signaler, ce n'est pas un manque d'apport
-  const feesExceedBudget = agencyFeesMode !== '%' && agencyFeesAmount > 0 && totalBudget - agencyFeesAmount <= 0
+  // Frais d'agence fixes et travaux qui absorbent tout le budget : à signaler, ce n'est pas un manque d'apport
+  const feesExceedBudget = fixedAgency + works > 0 && totalBudget - fixedAgency - works <= 0
 
-  // Prix atteignable avec l'apport « minApportNeeded » : le prêt finance alors tout le prix FAI
-  const fullCapacityPrice = agencyFeesMode === '%'
-    ? Math.round(borrowingCapacity / (1 + (agencyFees || 0) / 100) * 100) / 100
-    : Math.max(0, Math.round((borrowingCapacity - agencyFeesAmount) * 100) / 100)
-
-  return { maxPrice, notaryFees, totalBudget, agencyFees: maxPrice === 0 ? 0 : agencyFeesAmount, isApportConstrained, minApportNeeded, c1, c2, loanUsed, unusedCapacity, feesExceedBudget, fullCapacityPrice }
+  return {
+    maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount, works: maxPrice > 0 ? works : 0,
+    isApportConstrained, minApportNeeded, c1, c2, loanUsed, unusedCapacity, fullCapacityPrice, feesExceedBudget
+  }
 }
 
 /**
  * Calcule le montant à emprunter à partir d'un prix de bien connu.
  * "Prix du bien" = prix net vendeur (hors frais d'agence).
- * coûtTotal = prixNetVendeur + fraisNotaire + fraisAgence
+ * coûtTotal = prix + frais d'agence + travaux + notaire + dossier + garantie
  *
- * Les frais d'agence (FAA) peuvent être financés par le crédit (règle bancaire française).
- * Le prêt est donc plafonné au prix FAI = prix net vendeur + frais d'agence.
+ * Le prêt peut financer le prix FAI (prix net vendeur + frais d'agence) et les travaux.
  * Les frais de notaire, de dossier et de garantie ne sont pas finançables : ils viennent de l'apport.
- *   montantEmprunt = max(0, min(prixFAI, coûtTotal − apport))
+ *   montantEmprunt = max(0, min(prixFAI + travaux, coûtTotal − apport))
  *
- * fundingGap indique le manque d'apport pour couvrir les frais de notaire et de dossier.
+ * fundingGap indique le manque d'apport pour couvrir ces frais non finançables.
  *
  * @param {number} propertyPrice        - Prix net vendeur (€), hors frais d'agence
  * @param {'ancien'|'neuf'} propertyType - Type de bien
@@ -332,35 +334,36 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
  * @param {number} personalContribution  - Apport personnel (€)
  * @param {number} applicationFees       - Frais de dossier bancaire (€), optionnel
  * @param {number} guaranteeFees         - Frais de garantie, caution ou hypothèque (€), optionnel
- * @returns {{ loanAmount, notaryFees, agencyFees, applicationFees, totalCost, fundingGap, surplus, contributionUsed }}
+ * @param {{ dmtoRate?: string, works?: number, notaryFeesOf?: (price: number) => number }} [options]
+ * @returns {{ loanAmount, notaryFees, agencyFees, works, applicationFees, guaranteeFees, totalCost, fundingGap, surplus, contributionUsed }}
  *   surplus : part de l'apport qui dépasse le coût total ; contributionUsed : apport réellement mobilisé
  */
-export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0, agencyFeesMode = '€', personalContribution = 0, applicationFees = 0, guaranteeFees = 0) {
-  const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
-  // Les frais de notaire se calculent sur le prix net vendeur (hors agence FAA)
-  const notaryFees = Math.round(propertyPrice * notaryRate * 100) / 100
+export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0, agencyFeesMode = '€', personalContribution = 0, applicationFees = 0, guaranteeFees = 0, options = {}) {
+  const notaryFeesOf = options.notaryFeesOf ?? ((price) => calculateNotaryFees(price, propertyType, options.dmtoRate).total)
+  const works = options.works || 0
+  // Les frais de notaire se calculent sur le prix net vendeur (hors agence, hors travaux)
+  const notaryFees = roundCents(notaryFeesOf(propertyPrice))
 
   const agencyFeesAmount = agencyFeesMode === '%'
-    ? Math.round(propertyPrice * (agencyFees || 0) / 100 * 100) / 100
+    ? roundCents(propertyPrice * (agencyFees || 0) / 100)
     : (agencyFees || 0)
 
   const appFees = applicationFees || 0
   const guarantee = guaranteeFees || 0
-  const totalCost = Math.round((propertyPrice + notaryFees + agencyFeesAmount + appFees + guarantee) * 100) / 100
+  const totalCost = roundCents(propertyPrice + agencyFeesAmount + works + notaryFees + appFees + guarantee)
 
-  // Le prêt peut couvrir prix net vendeur + frais d'agence (= prix FAI)
-  // Les frais de notaire et de dossier ne sont pas finançables
-  const prixFAI = propertyPrice + agencyFeesAmount
-  const loanAmount = Math.max(0, Math.round(Math.min(prixFAI, totalCost - personalContribution) * 100) / 100)
+  // Ce que le prêt peut couvrir : prix FAI + travaux
+  const loanable = propertyPrice + agencyFeesAmount + works
+  const loanAmount = Math.max(0, roundCents(Math.min(loanable, totalCost - personalContribution)))
 
   // Apport manquant pour couvrir la partie non finançable (notaire + dossier + garantie)
-  const fundingGap = Math.max(0, Math.round((notaryFees + appFees + guarantee - personalContribution) * 100) / 100)
+  const fundingGap = Math.max(0, roundCents(notaryFees + appFees + guarantee - personalContribution))
 
   // Apport supérieur au coût total : rien à emprunter, et une partie de l'apport reste disponible
-  const surplus = Math.max(0, Math.round((personalContribution - totalCost) * 100) / 100)
-  const contributionUsed = Math.round((personalContribution - surplus) * 100) / 100
+  const surplus = Math.max(0, roundCents(personalContribution - totalCost))
+  const contributionUsed = roundCents(personalContribution - surplus)
 
-  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, applicationFees: appFees, guaranteeFees: guarantee, totalCost, fundingGap, surplus, contributionUsed }
+  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, works, applicationFees: appFees, guaranteeFees: guarantee, totalCost, fundingGap, surplus, contributionUsed }
 }
 
 /**

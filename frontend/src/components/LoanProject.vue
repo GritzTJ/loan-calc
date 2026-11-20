@@ -48,17 +48,22 @@
         <template #help>Caution ou hypothèque, souvent 1 à 1,5 % du prêt.</template>
       </FormField>
 
-      <FormField v-slot="{ labelId }" class="sm:col-span-2 lg:col-span-1" label="Type de bien" group>
-        <SegmentedControl v-model="propertyType" :aria-labelledby="labelId" :options="PROPERTY_TYPES" />
+      <FormField label="Travaux" hint="(optionnel)">
+        <template #default="{ id }">
+          <NumberInput :id="id" v-model="works" suffix="€" placeholder="0" />
+        </template>
+        <template #help>Finançables par le prêt.</template>
       </FormField>
+
+      <NotaryRateField v-model:property-type="propertyType" v-model:dmto-rate="dmtoRate" />
     </template>
 
     <template #result>
       <p class="flex items-center text-sm text-ink-2">
         Montant à emprunter
         <InfoTooltip
-          principe="Coût total moins apport, plafonné au prix FAI"
-          :calcul="`min(FAI = ${formatEuros(prixFAI)}, coût − apport = ${formatEuros(result.totalCost - (personalContribution || 0))})`"
+          principe="Coût total moins apport, plafonné à ce que le prêt peut financer (prix, agence, travaux)"
+          :calcul="`min(finançable = ${formatEuros(prixFAI)}, coût − apport = ${formatEuros(result.totalCost - (personalContribution || 0))})`"
         />
       </p>
       <p class="figure text-hero text-ink mt-1.5">{{ formatEuros(result.loanAmount) }}</p>
@@ -88,8 +93,8 @@
       <FundingBar class="mt-6" title="Besoins" :total="result.totalCost" :scale="scale" :segments="needSegments">
         <template #info-notary>
           <InfoTooltip
-            principe="Frais d'acquisition non finançables par le crédit, calculés sur le prix net vendeur"
-            :calcul="`${formatEuros(propertyPrice || 0)} × ${notaryRateLabel}`"
+            principe="Frais d'acquisition non finançables par le crédit, calculés au barème sur le prix net vendeur"
+            :calcul="notaryDetail"
           />
         </template>
         <template v-if="agencyFeesMode === '%'" #info-agency>
@@ -110,16 +115,16 @@ import {
   calculateLoanAmount,
   formatEuros,
   formatPercent,
-  NOTARY_FEES,
   AGENCY_FEES_HELP,
-  AGENCY_FEES_MODES,
-  PROPERTY_TYPES
+  AGENCY_FEES_MODES
 } from '../services/loanCalculator.js'
+import { calculateNotaryFees, describeNotaryFees, DEFAULT_DMTO } from '../services/notaryFees.js'
 import { usePersistedState } from '../composables/usePersistedState.js'
 import { useSavedSimulation } from '../composables/useSavedSimulation.js'
 import CalculatorLayout from './CalculatorLayout.vue'
 import FormField from './FormField.vue'
 import FundingBar from './FundingBar.vue'
+import NotaryRateField from './NotaryRateField.vue'
 import NumberInput from './NumberInput.vue'
 import InfoTooltip from './InfoTooltip.vue'
 import SaveSimulation from './SaveSimulation.vue'
@@ -139,12 +144,17 @@ const DEFAULTS = {
   personalContribution: 25000,
   agencyFees: null,
   agencyFeesMode: '€',
+  works: null,
   propertyType: 'ancien',
+  dmtoRate: DEFAULT_DMTO,
   applicationFees: null,
   guaranteeFees: null
 }
 const { state, reset } = usePersistedState('project', DEFAULTS)
-const { propertyPrice, personalContribution, agencyFees, agencyFeesMode, propertyType, applicationFees, guaranteeFees } = toRefs(state)
+const {
+  propertyPrice, personalContribution, agencyFees, agencyFeesMode, works, propertyType, dmtoRate,
+  applicationFees, guaranteeFees
+} = toRefs(state)
 
 const { current, save, update } = useSavedSimulation('project', () => ({ ...state }))
 
@@ -155,7 +165,9 @@ watch(() => props.loadParams, (p) => {
   personalContribution.value = p.personalContribution ?? null
   agencyFees.value = p.agencyFees ?? null
   agencyFeesMode.value = p.agencyFeesMode === '%' ? '%' : '€'
-  propertyType.value = p.propertyType in NOTARY_FEES ? p.propertyType : 'ancien'
+  works.value = p.works ?? null
+  propertyType.value = p.propertyType === 'neuf' ? 'neuf' : 'ancien'
+  dmtoRate.value = p.dmtoRate ?? DEFAULT_DMTO
   applicationFees.value = p.applicationFees ?? null
   guaranteeFees.value = p.guaranteeFees ?? null
   current.value = p.source ?? null
@@ -176,13 +188,17 @@ const result = computed(() =>
     agencyFeesMode.value,
     personalContribution.value || 0,
     applicationFees.value || 0,
-    guaranteeFees.value || 0
+    guaranteeFees.value || 0,
+    { dmtoRate: dmtoRate.value, works: works.value || 0 }
   )
 )
 
-const notaryRateLabel = computed(() => formatPercent(NOTARY_FEES[propertyType.value] * 100))
+// Détail des frais de notaire, pour l'info-bulle et le libellé (taux effectif)
+const notary = computed(() => calculateNotaryFees(propertyPrice.value || 0, propertyType.value, dmtoRate.value))
+const notaryRateLabel = computed(() => `≈ ${formatPercent(Math.round(notary.value.effectiveRate * 10) / 10)}`)
+const notaryDetail = computed(() => describeNotaryFees(notary.value))
 
-const prixFAI = computed(() => (propertyPrice.value || 0) + result.value.agencyFees)
+const prixFAI = computed(() => (propertyPrice.value || 0) + result.value.agencyFees + result.value.works)
 
 // Ressources mobilisées : seule la part de l'apport nécessaire au projet compte (l'excédent est signalé à part)
 const resources = computed(() =>
@@ -194,6 +210,7 @@ const scale = computed(() => Math.max(result.value.totalCost, resources.value))
 const needSegments = computed(() => [
   { key: 'price', label: 'Prix net vendeur', value: propertyPrice.value || 0, color: 'capital', group: 'Finançable par le prêt' },
   { key: 'agency', label: 'Frais d\'agence', value: result.value.agencyFees, color: 'capital', group: 'Finançable par le prêt' },
+  { key: 'works', label: 'Travaux', value: result.value.works, color: 'capital', group: 'Finançable par le prêt' },
   { key: 'notary', label: `Frais de notaire (${notaryRateLabel.value})`, value: result.value.notaryFees, color: 'apport', group: 'À payer avec l\'apport' },
   { key: 'fees', label: 'Frais de dossier', value: result.value.applicationFees, color: 'apport', group: 'À payer avec l\'apport' },
   { key: 'guarantee', label: 'Frais de garantie', value: result.value.guaranteeFees, color: 'apport', group: 'À payer avec l\'apport' }
