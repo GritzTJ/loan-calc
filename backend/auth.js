@@ -104,6 +104,8 @@ export async function callbackRoute(req, res) {
       process.env.OIDC_REDIRECT_URI,
       params,
       {
+        // response_type : vérifie que la réponse contient bien un code (contrôle recommandé par openid-client)
+        response_type: 'code',
         state: req.session.oidcState,
         code_verifier: req.session.oidcCodeVerifier
       }
@@ -134,7 +136,15 @@ export async function callbackRoute(req, res) {
       req.session.user = user
       // Conserve l'id_token pour le logout complet (end_session_endpoint)
       req.session.idToken = tokenSet.id_token
-      res.redirect(returnTo)
+      // Écrit la session avant de rediriger : la page suivante ne doit pas se charger
+      // avant que la session authentifiée soit enregistrée (recommandation d'express-session).
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('[OIDC] session save error:', saveErr.message)
+          return sendLoginError(res)
+        }
+        res.redirect(returnTo)
+      })
     })
   } catch (err) {
     console.error('[OIDC] callbackRoute error:', err.message)
