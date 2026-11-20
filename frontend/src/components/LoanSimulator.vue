@@ -103,8 +103,9 @@
       <p v-if="plan.smoothed && hasEvents" class="notice notice-info mt-3">
         Le remboursement anticipé et le changement de mensualité ne sont pas appliqués quand les mensualités sont lissées.
       </p>
-      <div class="mt-4">
+      <div class="flex flex-wrap gap-2 mt-4">
         <SaveSimulation placeholder="Ex : Appart Lyon - 20 ans" :save="save" :update="update" :current="current" />
+        <PdfButton :build="buildPdf" />
       </div>
 
       <!-- Effet d'un remboursement anticipé ou d'un changement de mensualité, par rapport au prêt sans changement -->
@@ -227,6 +228,8 @@ import {
   calculateTAEG,
   generateAmortizationTable,
   getDefaultStartDate,
+  summarizeByYear,
+  INSURANCE_MODES,
   formatCurrency,
   formatEuros,
   formatDate,
@@ -236,7 +239,7 @@ import {
   MAX_RATE
 } from '../services/loanCalculator.js'
 import { USURY, usuryRateFor, isUsuryOutdated } from '../services/usury.js'
-import { buildLoanPlan, paymentSteps, extraLoanName, MAX_EXTRA_LOANS } from '../services/multiLoan.js'
+import { buildLoanPlan, paymentSteps, extraLoanName, isUsableLoan, MAX_EXTRA_LOANS } from '../services/multiLoan.js'
 import { usePersistedState } from '../composables/usePersistedState.js'
 import { useSavedSimulation } from '../composables/useSavedSimulation.js'
 import AmortizationTable from './AmortizationTable.vue'
@@ -249,6 +252,7 @@ import FormField from './FormField.vue'
 import FundingBar from './FundingBar.vue'
 import InsuranceField from './InsuranceField.vue'
 import NumberInput from './NumberInput.vue'
+import PdfButton from './PdfButton.vue'
 import InfoTooltip from './InfoTooltip.vue'
 import SaveSimulation from './SaveSimulation.vue'
 
@@ -508,6 +512,66 @@ const usuryNote = computed(() => {
 
 // Taux sans unité, pour l'exemple grisé d'un champ qui affiche déjà « % »
 const formatRate = (value) => String(value).replace('.', ',')
+
+// Synthèse PDF : les paramètres, le résultat, et le tableau par année
+function buildPdf() {
+  const hasInsurance = totalInsurance.value > 0
+  const loanRows = [
+    [plan.value.loans.length > 1 ? 'Prêt principal' : 'Montant emprunté', formatEuros(principal.value)],
+    ['Taux annuel', formatPercent(annualRate.value)],
+    ['Durée', formatDuration(months.value)],
+    ['Première mensualité le', firstPaymentLabel.value]
+  ]
+  if (hasInsurance) {
+    const mode = INSURANCE_MODES.find(m => m.value === insuranceMode.value)?.label.toLowerCase()
+    loanRows.push(['Assurance', `${formatPercent(insuranceRate.value)} sur ${mode}, quotité ${formatPercent(insuranceQuota.value ?? 100)}`])
+  }
+  // Les prêts complémentaires du plan sont, dans l'ordre, ceux de la saisie qui sont complets
+  const usableLoans = extraLoans.value.filter(isUsableLoan)
+  for (const [index, loan] of plan.value.loans.slice(1).entries()) {
+    const source = usableLoans[index]
+    loanRows.push([loan.label, `${formatEuros(loan.principal)} à ${formatPercent(source?.annualRate ?? 0)} sur ${formatDuration(loan.table.length)}`])
+  }
+  if (plan.value.smoothed) loanRows.push(['Mensualités', 'lissées sur l\'ensemble des prêts'])
+  if (!plan.value.smoothed && events.value.earlyRepayment) {
+    loanRows.push(['Remboursement anticipé', `${formatEuros(earlyAmount.value)} au bout de ${formatDuration(earlyAfterMonths.value)}`])
+  }
+  if (!plan.value.smoothed && events.value.modulation) {
+    loanRows.push(['Changement de mensualité', `${formatCurrency(modulationPayment.value)} au bout de ${formatDuration(modulationAfterMonths.value || 0)}`])
+  }
+
+  const resultRows = [[hasInsurance ? 'Mensualité, assurance comprise' : 'Mensualité', formatCurrency(monthlyTotal.value)]]
+  for (const step of steps.value.slice(1)) resultRows.push([`À partir du ${formatDate(step.date)}`, formatCurrency(step.amount)])
+  resultRows.push(['Fin du prêt', formatDate(amortizationTable.value.at(-1).date)])
+  resultRows.push(['Capital emprunté', formatEuros(totalPrincipal.value)])
+  resultRows.push(['Intérêts', formatEuros(totalInterest.value)])
+  if (hasInsurance) resultRows.push(['Assurance', formatEuros(totalInsurance.value)])
+  if (applicationFees.value > 0) resultRows.push(['Frais de dossier', formatEuros(applicationFees.value)])
+  if (guaranteeFees.value > 0) resultRows.push(['Frais de garantie', formatEuros(guaranteeFees.value)])
+  if (totalPenalty.value > 0) resultRows.push(['Indemnités de remboursement anticipé', formatEuros(totalPenalty.value)])
+  resultRows.push(['Coût du crédit', formatEuros(creditCost.value)])
+  if (taeg.value !== null) resultRows.push(['TAEG', formatPercent(taeg.value)])
+
+  const years = summarizeByYear(amortizationTable.value)
+  return {
+    title: current.value?.name || 'Simulation de prêt immobilier',
+    subtitle: `Établie le ${formatDate(new Date())}`,
+    sections: [
+      { heading: 'Le prêt', rows: loanRows },
+      { heading: 'Ce qu\'il coûte', rows: resultRows }
+    ],
+    table: {
+      heading: 'Tableau d\'amortissement par année',
+      head: ['Année', 'Restant dû', 'Capital', 'Intérêts', ...(hasInsurance ? ['Assurance'] : []), 'Payé'],
+      body: years.map(y => [
+        `An ${y.year}`, formatEuros(y.remainingPrincipal), formatEuros(y.principal), formatEuros(y.interest),
+        ...(hasInsurance ? [formatEuros(y.insurance)] : []), formatEuros(y.total)
+      ])
+    },
+    note: 'Simulation indicative, sans valeur contractuelle. Seule l\'offre de prêt de la banque fait foi.',
+    filename: 'simulation-pret.pdf'
+  }
+}
 
 const feesSummary = computed(() => (upfrontFees.value > 0 ? formatEuros(upfrontFees.value) : ''))
 

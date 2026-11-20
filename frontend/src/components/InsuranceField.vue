@@ -1,11 +1,11 @@
 <template>
   <FormField label="Assurance" :hint="compact ? '' : '(optionnel)'">
-    <template #aside>
+    <template v-if="!compact" #aside>
       <SegmentedControl
         :model-value="mode"
         size="sm"
         aria-label="Base de calcul de l'assurance"
-        :options="compact ? COMPACT_MODES : INSURANCE_MODES"
+        :options="INSURANCE_MODES"
         @update:model-value="emit('update:mode', $event)"
       />
     </template>
@@ -18,6 +18,16 @@
         :suffix="compact ? '%' : '% / an'"
         placeholder="0,30"
         @update:model-value="emit('update:rate', $event)"
+      />
+      <!-- Colonne étroite (comparaison) : le choix passe sous le champ, il ne tient pas à côté du libellé -->
+      <SegmentedControl
+        v-if="compact"
+        class="mt-2"
+        :model-value="mode"
+        size="sm"
+        aria-label="Base de calcul de l'assurance"
+        :options="COMPACT_MODES"
+        @update:model-value="emit('update:mode', $event)"
       />
     </template>
     <!-- Dit à quel contrat correspond le mode choisi : c'est ce que l'on sait en lisant une offre -->

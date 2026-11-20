@@ -96,17 +96,17 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.7.0**
+Simulateur de prêt immobilier — usage personnel — **v2.7.1**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
-5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** · **Historique**
+5 onglets : **Simulateur** · **Capacité** · **Projet** · **Comparer** (deux modes : prêts, louer ou acheter) · **Historique**
 
 ## Stack technique
 
 | Couche | Techno |
 |--------|--------|
-| Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js + police Archivo variable auto-hébergée (`@fontsource-variable/archivo`) |
+| Frontend | Vue 3 (Composition API) + Vite + Tailwind CSS + Chart.js + SheetJS et jsPDF (exports, chargés au clic) + police Archivo variable auto-hébergée (`@fontsource-variable/archivo`) |
 | Backend | Node.js 22 + Express 4 + SQLite (better-sqlite3) |
 | Build | Docker multi-stage (`node:22.23.5-alpine`, version épinglée) |
 | Dev | Vite sur `:5173` proxy `/api/*` et `/auth/*` → Express sur `:3000` |
@@ -126,6 +126,11 @@ frontend/
     main.js                        — montage Vue + enregistrement du service worker (autoUpdate)
     services/loanCalculator.js     — toutes les formules financières (+ formatage, bornes de saisie)
     services/loanCalculator.test.js — tests Vitest des formules et des règles métier
+    services/notaryFees.js         — frais de notaire au barème
+    services/usury.js              — seuils d'usure du trimestre (à mettre à jour chaque trimestre)
+    services/multiLoan.js          — prêts complémentaires, lissage, tableau combiné
+    services/rentVsBuy.js          — projection louer / acheter
+    services/pdfExport.js          — synthèses PDF (jsPDF, chargé au clic)
     services/numberParsing.js      — analyse de la saisie numérique (« 200.000 », « 1.234,56 »…), testée à part
     services/storageService.js     — appels API REST (lève une `ApiError` en cas d'échec)
     composables/usePersistedState.js — saisie d'un onglet conservée dans `localStorage` (+ `reset`)
@@ -138,7 +143,12 @@ frontend/
       FormField.vue                — libellé relié à son champ (`for`/`id` via `useId`)
       NumberInput.vue              — saisie numérique formatée, bornée (`min`/`max`), unité dans le champ (`suffix`)
       DurationField.vue            — durée saisie en années ou en mois (le modèle reste en mois)
-      InsuranceField.vue           — taux d'assurance + base de calcul (capital initial / restant dû)
+      InsuranceField.vue           — taux d'assurance + base de calcul (capital initial / restant dû) + quotité
+      NotaryRateField.vue          — type de bien + droits de mutation
+      CollapsibleSection.vue       — section de formulaire repliable (`<details>`), pour les réglages secondaires
+      EarlyRepayment.vue, ExtraLoans.vue — sections du Simulateur (remboursement anticipé, modulation, prêts complémentaires)
+      CompareTab.vue               — onglet Comparer : bascule entre LoanComparison (2 à 4 prêts) et RentVsBuy
+      PdfButton.vue                — bouton d'export PDF (Simulateur, Projet)
       AmortizationTable.vue        — tableau par année, chaque année dépliable en mensualités
       SegmentedControl.vue         — groupe de boutons à choix unique
       SaveSimulation.vue           — bouton « Enregistrer » + modale `<dialog>` ; propose « Mettre à jour » si la saisie vient de l'historique
@@ -159,7 +169,7 @@ frontend/
 
 ## Tests
 
-- `cd frontend && npm test` — Vitest sur `loanCalculator.js` et `numberParsing.js`
+- `cd frontend && npm test` — Vitest sur tous les `services/*.test.js` (calculs de prêt, notaire, usure, prêts multiples, louer/acheter, saisie)
 - `cd backend && npm test` — `node --test` : routeur simulations (base `:memory:`), migration du schéma (`db.test.js`) et `safeReturnTo`
 - Les deux suites tournent dans GitHub Actions (job `test`) avant le build de l'image
 
@@ -181,6 +191,8 @@ frontend/
 - **TAEG** (`calculateTAEG`) : méthode actuarielle sur les échéances du tableau, frais de dossier et de garantie déduits du capital reçu. **Seuils d'usure** dans `services/usury.js`, **à mettre à jour chaque trimestre** (l'app signale une valeur périmée)
 - **Événements du prêt** (6e paramètre de `generateAmortizationTable`) : un remboursement anticipé (`effect` `duration` ou `payment`, indemnités au plafond légal = 6 mois d'intérêts sur le capital remboursé, 3 % du restant dû au plus) et une modulation de mensualité (la durée s'ajuste, bornée à `MAX_LOAN_MONTHS`). L'effet affiché compare au même prêt sans événement
 - **Prêts multiples** (`services/multiLoan.js`) : un prêt principal + jusqu'à 3 prêts complémentaires ; `buildLoanPlan` renvoie un tableau par prêt et le tableau `combined` (somme mois par mois), source des totaux du Simulateur. **Lissage** : total mensuel de crédit constant résolu par dichotomie, le prêt principal payant ce total moins les autres mensualités (jamais moins que ses intérêts) ; appliqué seulement si les prêts complémentaires finissent au plus tard avec le principal, et il désactive remboursement anticipé et modulation. L'assurance s'applique à chaque prêt
+- **Louer ou acheter** (`compareRentAndBuy`) : même budget mensuel dans les deux cas, le moins dépensier place la différence ; patrimoine acheteur = valeur du bien − restant dû + épargne, patrimoine locataire = apport placé + économies. Non comptés : frais de revente, fiscalité de l'épargne, gros travaux
+- **Comparer** : 2 à 4 scénarios, alimentables depuis l'Historique (seul le prêt principal d'une simulation est repris)
 - **Quotité d'assurance** : multiplie le taux (`effectiveInsuranceRate`), 100 % par défaut
 - Taux plafonnés à 30 % (`MAX_RATE`)
 - **Types de simulation** : `loan`, `capacity`, `project` (`SIMULATION_TYPES` dans `backend/db.js`). En ajouter un déclenche la reconstruction de la table au démarrage (SQLite ne modifie pas un `CHECK`)
@@ -188,7 +200,7 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.7.0)
+- `main` — version stable (v2.7.1)
 
 ## PWA
 
@@ -221,6 +233,7 @@ frontend/
 - Épinglée au patch près à **trois endroits à garder alignés** : les deux `FROM` du `Dockerfile` et `node-version` du workflow. Plancher dans `backend/package.json` (`engines`)
 - Minimum **22.23.4** (correctif Node2Shell, CVE-2026-111497 — décodeur Brotli de Node). Un correctif de sécurité Node n'arrive en production qu'en relevant ces versions puis en poussant un tag
 - `xlsx` vient de la distribution officielle SheetJS (`cdn.sheetjs.com`), pas de npm où la version est figée en 0.18.5 vulnérable
+- `html2canvas` et `purify` (modules optionnels de jsPDF, jamais chargés) sont exclus du précache du service worker (`globIgnores`)
 - `npm audit` frontend : il reste 4 alertes modérées (`glob`/`minimatch` via `workbox-build`), outillage de build uniquement, sans correctif tant que `vite-plugin-pwa` ne monte pas `workbox-build`
 
 ## CI/CD

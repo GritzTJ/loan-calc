@@ -2,11 +2,11 @@
 
 Application web de simulation de prêt immobilier avec cinq modules :
 
-1. **Simulateur de prêt** — Mensualité, tableau d'amortissement par année (dépliable en mensualités), graphique, export Excel
-2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible
-3. **Projet** — Montant à emprunter pour un bien donné, plan de financement besoins / ressources
-4. **Comparaison de scénarios** — Deux prêts côte à côte avec tableau comparatif
-5. **Historique** — Simulations, capacités et projets enregistrés : ouvrir, mettre à jour, renommer, supprimer
+1. **Simulateur de prêt** — Mensualité, coût, TAEG comparé au seuil d'usure, prêts complémentaires (PTZ…) avec lissage, remboursement anticipé et modulation, tableau d'amortissement par année, exports Excel et PDF
+2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible (frais de notaire au barème, travaux)
+3. **Projet** — Montant à emprunter pour un bien donné, plan de financement besoins / ressources, export PDF
+4. **Comparer** — 2 à 4 prêts côte à côte (chargeables depuis l'historique), et un mode « Louer ou acheter »
+5. **Historique** — Simulations, capacités et projets enregistrés : ouvrir, comparer, mettre à jour, renommer, supprimer
 
 Toutes les calculettes de prêt intègrent une assurance emprunteur optionnelle, calculée sur le capital initial (contrat de la banque) ou sur le capital restant dû (délégation).
 
@@ -53,6 +53,10 @@ docker compose up -d --build
 ```
 
 L'application est accessible via Traefik sur `https://loan-calc.domaine.fr`.
+
+## Entretien trimestriel : seuils d'usure
+
+Les seuils d'usure embarqués (`frontend/src/services/usury.js`) changent chaque trimestre. Mettre à jour la période et les trois taux d'après l'avis de la Banque de France, puis publier une version. Passé la fin du trimestre, l'app signale elle-même que la valeur est périmée ; un seuil peut aussi être saisi à la main dans le Simulateur.
 
 ## Mises à jour de sécurité de Node
 

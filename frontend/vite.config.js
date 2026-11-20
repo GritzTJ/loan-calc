@@ -38,7 +38,8 @@ export default defineConfig({
         // Ne mets pas l'index en cache pour les routes API/auth — toujours laisser le serveur répondre
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Les splash screens iOS ne servent qu'à l'installation : inutile de les précacher sur chaque appareil
-        globIgnores: ['**/splash-*.png'],
+        // html2canvas et purify : modules optionnels de jsPDF (rendu HTML), jamais chargés par l'app
+        globIgnores: ['**/splash-*.png', '**/html2canvas*.js', '**/purify*.js'],
         cleanupOutdatedCaches: true,
         clientsClaim: true
       }

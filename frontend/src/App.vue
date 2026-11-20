@@ -62,17 +62,18 @@
           :load-params="loadParamsProject"
           @simulate="onSimulate"
         />
-        <LoanComparison v-else-if="activeTab === 'comparison'" />
+        <CompareTab v-else-if="activeTab === 'comparison'" :add-loan="compareLoan" />
         <SimulationHistory
           v-else-if="activeTab === 'history'"
           @load="onLoadSimulation"
+          @compare="onCompare"
         />
       </KeepAlive>
     </main>
 
     <!-- Le padding bas laisse la place à la barre d'onglets fixe sur téléphone -->
     <footer class="max-w-5xl mx-auto px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
-      <span>Prêt immobilier v2.7.0, usage personnel</span>
+      <span>Prêt immobilier v2.7.1, usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-ink">Déconnexion</a>
@@ -108,7 +109,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import LoanSimulator from './components/LoanSimulator.vue'
 import BorrowingCapacity from './components/BorrowingCapacity.vue'
-import LoanComparison from './components/LoanComparison.vue'
+import CompareTab from './components/CompareTab.vue'
 import SimulationHistory from './components/SimulationHistory.vue'
 import LoanProject from './components/LoanProject.vue'
 import { useTheme } from './composables/useTheme.js'
@@ -168,6 +169,8 @@ onMounted(async () => {
 const loadParamsLoan = ref(null)
 const loadParamsCapacity = ref(null)
 const loadParamsProject = ref(null)
+// Prêt de l'historique à ajouter à la comparaison
+const compareLoan = ref(null)
 
 const themeTitle = computed(() => {
   const labels = { system: 'Thème : auto', light: 'Thème : clair', dark: 'Thème : sombre' }
@@ -186,6 +189,12 @@ function onLoadSimulation({ type, params, source }) {
   if (!target) return
   target.params.value = { ...params, source, _ts: Date.now() } // _ts force la réactivité
   activeTab.value = target.tab
+}
+
+// « Comparer » depuis l'historique : ajoute le prêt aux scénarios et ouvre l'onglet Comparer
+function onCompare(loan) {
+  compareLoan.value = { ...loan, _ts: Date.now() }
+  activeTab.value = 'comparison'
 }
 
 // « Simuler ce prêt » (Capacité, Projet) : ouvre le Simulateur avec le prêt calculé.

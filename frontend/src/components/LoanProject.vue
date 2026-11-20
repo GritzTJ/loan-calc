@@ -86,6 +86,7 @@
           Simuler ce prêt
         </button>
         <SaveSimulation placeholder="Ex : Maison Nantes" :save="save" :update="update" :current="current" />
+        <PdfButton :build="buildPdf" />
       </div>
 
       <!-- Plan de financement : les deux barres partagent la même échelle. Le prêt part de la gauche,
@@ -113,6 +114,7 @@
 import { computed, toRefs, watch } from 'vue'
 import {
   calculateLoanAmount,
+  formatDate,
   formatEuros,
   formatPercent,
   AGENCY_FEES_HELP,
@@ -126,6 +128,7 @@ import FormField from './FormField.vue'
 import FundingBar from './FundingBar.vue'
 import NotaryRateField from './NotaryRateField.vue'
 import NumberInput from './NumberInput.vue'
+import PdfButton from './PdfButton.vue'
 import InfoTooltip from './InfoTooltip.vue'
 import SaveSimulation from './SaveSimulation.vue'
 import SegmentedControl from './SegmentedControl.vue'
@@ -222,6 +225,30 @@ const resourceSegments = computed(() => [
   { key: 'gap', label: 'Apport manquant', value: result.value.fundingGap, color: 'gap' },
   { key: 'apport', label: result.value.surplus > 0 ? 'Apport utilisé' : 'Apport', value: result.value.contributionUsed, color: 'apport', always: true }
 ])
+
+// Synthèse PDF : le plan de financement, besoins puis ressources
+function buildPdf() {
+  const filled = (segments) => segments.filter(s => s.value > 0).map(s => [s.label, formatEuros(s.value)])
+  const resourceRows = [['Prêt', formatEuros(result.value.loanAmount)], [result.value.surplus > 0 ? 'Apport utilisé' : 'Apport', formatEuros(result.value.contributionUsed)]]
+  if (result.value.fundingGap > 0) resourceRows.push(['Apport manquant', formatEuros(result.value.fundingGap)])
+  if (result.value.surplus > 0) resourceRows.push(['Apport restant disponible', formatEuros(result.value.surplus)])
+  return {
+    title: current.value?.name || 'Projet d\'achat immobilier',
+    subtitle: `Établi le ${formatDate(new Date())}`,
+    sections: [
+      { heading: 'Besoins', rows: [...filled(needSegments.value), ['Total', formatEuros(result.value.totalCost)]] },
+      { heading: 'Ressources', rows: resourceRows },
+      { heading: 'Frais de notaire', rows: [
+        ['Type de bien', propertyType.value === 'neuf' ? 'Neuf' : 'Ancien'],
+        ['Droits de mutation', formatEuros(notary.value.duties)],
+        ['Émoluments du notaire', formatEuros(notary.value.emoluments)],
+        ['Sécurité immobilière, formalités et débours', formatEuros(notary.value.csi + notary.value.disbursements)]
+      ] }
+    ],
+    note: 'Estimation indicative. Les frais de notaire sont calculés au barème ; seul le décompte du notaire fait foi.',
+    filename: 'projet-achat.pdf'
+  }
+}
 
 function onSimulate() {
   emit('simulate', {
