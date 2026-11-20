@@ -39,7 +39,7 @@ async function request(url, options) {
 /**
  * Sauvegarde une simulation.
  * @param {string} name - Nom donné par l'utilisateur
- * @param {'loan'|'capacity'} type - Type de simulation
+ * @param {'loan'|'capacity'|'project'} type - Type de simulation
  * @param {Object} params - Paramètres d'entrée
  * @returns {Promise<Object>} La simulation sauvegardée
  * @throws {ApiError}
@@ -71,4 +71,20 @@ export async function getSimulations() {
  */
 export async function deleteSimulation(id) {
   await request(`${BASE_URL}/${id}`, { method: 'DELETE' })
+}
+
+/**
+ * Modifie une simulation existante : son nom, ses paramètres, ou les deux.
+ * @param {string|number} id
+ * @param {{ name?: string, params?: Object }} changes
+ * @returns {Promise<Object>} La simulation modifiée
+ * @throws {ApiError}
+ */
+export async function updateSimulation(id, changes) {
+  const res = await request(`${BASE_URL}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes)
+  })
+  return res.json()
 }

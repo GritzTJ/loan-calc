@@ -57,7 +57,11 @@
           :load-params="loadParamsCapacity"
           @simulate="onSimulate"
         />
-        <LoanProject v-else-if="activeTab === 'project'" @simulate="onSimulate" />
+        <LoanProject
+          v-else-if="activeTab === 'project'"
+          :load-params="loadParamsProject"
+          @simulate="onSimulate"
+        />
         <LoanComparison v-else-if="activeTab === 'comparison'" />
         <SimulationHistory
           v-else-if="activeTab === 'history'"
@@ -68,7 +72,7 @@
 
     <!-- Le padding bas laisse la place à la barre d'onglets fixe sur téléphone -->
     <footer class="max-w-5xl mx-auto px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
-      <span>Prêt immobilier v2.6.2, usage personnel</span>
+      <span>Prêt immobilier v2.6.3, usage personnel</span>
       <span v-if="userName" class="flex items-center gap-2">
         <span>{{ userName }}</span>
         <a href="/auth/logout" class="underline hover:text-ink">Déconnexion</a>
@@ -101,7 +105,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import LoanSimulator from './components/LoanSimulator.vue'
 import BorrowingCapacity from './components/BorrowingCapacity.vue'
 import LoanComparison from './components/LoanComparison.vue'
@@ -118,12 +122,26 @@ const tabs = [
   { id: 'history', label: 'Historique', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' }
 ]
 
-// Lecture du paramètre ?tab=... (utilisé par les raccourcis PWA Android)
-const initialTab = (() => {
+// L'onglet courant vit dans l'URL (?tab=...) : un rechargement y revient, le bouton retour remonte
+// d'onglet en onglet au lieu de quitter l'app, et les raccourcis PWA Android ouvrent le bon onglet.
+function tabFromUrl() {
   const param = new URLSearchParams(window.location.search).get('tab')
   return tabs.some(tab => tab.id === param) ? param : 'simulator'
-})()
-const activeTab = ref(initialTab)
+}
+const activeTab = ref(tabFromUrl())
+
+watch(activeTab, (tab) => {
+  // Changement venu du bouton retour : l'URL est déjà la bonne, ne pas empiler une entrée de plus
+  if (tab === tabFromUrl()) return
+  const url = new URL(window.location.href)
+  tab === 'simulator' ? url.searchParams.delete('tab') : url.searchParams.set('tab', tab)
+  window.history.pushState(null, '', url)
+})
+
+const onPopState = () => { activeTab.value = tabFromUrl() }
+window.addEventListener('popstate', onPopState)
+onUnmounted(() => window.removeEventListener('popstate', onPopState))
+
 const { mode, toggleTheme } = useTheme()
 const userName = ref(null)
 
@@ -149,21 +167,25 @@ onMounted(async () => {
 // Params à injecter dans les composants (chargement depuis l'historique, « Simuler ce prêt »)
 const loadParamsLoan = ref(null)
 const loadParamsCapacity = ref(null)
+const loadParamsProject = ref(null)
 
 const themeTitle = computed(() => {
   const labels = { system: 'Thème : auto', light: 'Thème : clair', dark: 'Thème : sombre' }
   return labels[mode.value]
 })
 
-// Chargement depuis l'historique : bascule vers le bon onglet et injecte les params
-function onLoadSimulation({ type, params }) {
-  if (type === 'loan') {
-    loadParamsLoan.value = { ...params, _ts: Date.now() } // _ts force la réactivité
-    activeTab.value = 'simulator'
-  } else {
-    loadParamsCapacity.value = { ...params, _ts: Date.now() }
-    activeTab.value = 'capacity'
-  }
+// Chargement depuis l'historique : bascule vers l'onglet du type de la simulation et injecte les params.
+// source ({ id, name }) permet à l'onglet de proposer la mise à jour de cette simulation.
+const HISTORY_TARGETS = {
+  loan: { tab: 'simulator', params: loadParamsLoan },
+  capacity: { tab: 'capacity', params: loadParamsCapacity },
+  project: { tab: 'project', params: loadParamsProject }
+}
+function onLoadSimulation({ type, params, source }) {
+  const target = HISTORY_TARGETS[type]
+  if (!target) return
+  target.params.value = { ...params, source, _ts: Date.now() } // _ts force la réactivité
+  activeTab.value = target.tab
 }
 
 // « Simuler ce prêt » (Capacité, Projet) : ouvre le Simulateur avec le prêt calculé.

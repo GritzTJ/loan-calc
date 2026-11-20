@@ -3,16 +3,18 @@
     title="Capacité d'emprunt"
     :ready="isValid"
     empty-hint="Saisissez vos revenus ou une mensualité, une durée et un taux pour connaître votre capacité."
+    resettable
+    @reset="onReset"
   >
     <template #summary>
       <div class="flex items-baseline justify-between gap-3">
         <span class="text-sm text-ink-2">Capital empruntable</span>
-        <span class="figure text-lg text-ink">{{ formatCurrency(capacity) }}</span>
+        <span class="figure text-lg text-ink">{{ formatEuros(capacity) }}</span>
       </div>
       <!-- Même condition que dans la feuille de résultat : pas de prix du bien sans capacité d'emprunt -->
       <div v-if="capacity > 0 && priceResult.maxPrice > 0" class="flex items-baseline justify-between gap-3">
         <span class="text-sm text-ink-2">Prix du bien accessible</span>
-        <span class="figure text-base text-ink">{{ formatCurrency(priceResult.maxPrice) }}</span>
+        <span class="figure text-base text-ink">{{ formatEuros(priceResult.maxPrice) }}</span>
       </div>
     </template>
 
@@ -51,9 +53,7 @@
         <NumberInput :id="id" v-model="annualRate" :decimals="2" :max="MAX_RATE" suffix="%" placeholder="3,50" />
       </FormField>
 
-      <FormField v-slot="{ id }" label="Taux d'assurance" hint="(optionnel)">
-        <NumberInput :id="id" v-model="insuranceRate" :decimals="2" :max="MAX_RATE" suffix="% / an" placeholder="0,30" />
-      </FormField>
+      <InsuranceField v-model:rate="insuranceRate" v-model:mode="insuranceMode" />
 
       <!-- Le bien visé : sert au calcul du prix accessible -->
       <h3 class="sm:col-span-2 lg:col-span-1 mt-2 pt-4 border-t border-line text-base font-semibold text-ink">Le bien visé</h3>
@@ -69,6 +69,7 @@
         <template #default="{ id }">
           <NumberInput :id="id" v-model="agencyFees" :decimals="2" :suffix="agencyFeesMode" placeholder="0" />
         </template>
+        <template #help>{{ AGENCY_FEES_HELP }}</template>
       </FormField>
 
       <FormField v-slot="{ labelId }" class="sm:col-span-2 lg:col-span-1" label="Type de bien" group>
@@ -84,7 +85,7 @@
           :calcul="`${formatCurrency(maxPayment)} à ${formatPercent(annualRate)} sur ${months} mois`"
         />
       </p>
-      <p class="figure text-hero text-ink mt-1.5">{{ formatCurrency(capacity) }}</p>
+      <p class="figure text-hero text-ink mt-1.5">{{ formatEuros(capacity) }}</p>
 
       <p class="mt-2 text-sm text-ink-2">
         <span class="inline-flex items-center">
@@ -92,13 +93,13 @@
           <InfoTooltip
             v-if="inputMode === 'income'"
             principe="Plafond d'endettement appliqué aux revenus"
-            :calcul="`${formatCurrency(monthlyIncome)} × ${formatPercent(debtRatio)} − ${formatCurrency(monthlyCharges || 0)}`"
+            :calcul="`${formatEuros(monthlyIncome)} × ${formatPercent(debtRatio)} − ${formatEuros(monthlyCharges || 0)}`"
           />
         </span>
         <!-- Le budget mensuel se partage entre le crédit et l'assurance -->
         <template v-if="monthlyInsurance > 0">
           : <span class="figure text-ink">{{ formatCurrency(maxPayment) }}</span> de crédit
-          et <span class="figure text-ink">{{ formatCurrency(monthlyInsurance) }}</span> d'assurance
+          et <span class="figure text-ink">{{ formatCurrency(monthlyInsurance) }}</span> d'assurance<template v-if="insuranceMode === 'crd'"> le premier mois (elle baisse ensuite)</template>
         </template>
       </p>
 
@@ -108,7 +109,7 @@
 
       <div class="flex flex-wrap gap-2 mt-4">
         <button v-if="capacity > 0" type="button" class="btn btn-primary" @click="onSimulate">Simuler ce prêt</button>
-        <SaveSimulation placeholder="Ex : Capacité emprunt 2026" :save="onSave" />
+        <SaveSimulation placeholder="Ex : Capacité emprunt 2026" :save="save" :update="update" :current="current" />
       </div>
 
       <template v-if="capacity > 0">
@@ -126,24 +127,28 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { computed, toRefs, watch } from 'vue'
 import {
   calculateMaxMonthlyPayment,
   calculateBorrowingCapacity,
   calculateInsuranceCost,
   calculateMaxPropertyPrice,
   formatCurrency,
+  formatEuros,
   formatPercent,
   sanitizeMonths,
   MAX_RATE,
+  AGENCY_FEES_HELP,
   AGENCY_FEES_MODES,
   PROPERTY_TYPES
 } from '../services/loanCalculator.js'
-import { saveSimulation } from '../services/storageService.js'
+import { usePersistedState } from '../composables/usePersistedState.js'
+import { useSavedSimulation } from '../composables/useSavedSimulation.js'
 import CalculatorLayout from './CalculatorLayout.vue'
 import DurationField from './DurationField.vue'
 import FormField from './FormField.vue'
 import InfoTooltip from './InfoTooltip.vue'
+import InsuranceField from './InsuranceField.vue'
 import NumberInput from './NumberInput.vue'
 import PropertyPrice from './PropertyPrice.vue'
 import SaveSimulation from './SaveSimulation.vue'
@@ -162,41 +167,58 @@ const INPUT_MODES = [
   { value: 'payment', label: 'Mensualité connue' }
 ]
 
-// Valeurs de départ de l'onglet
+// Exemple de départ de l'onglet
 const DEFAULTS = {
   inputMode: 'income', // 'income' | 'payment'
+  // Mode « Par revenus »
   monthlyIncome: 4000,
   monthlyCharges: 0,
   debtRatio: 35,
+  // Mode « Mensualité connue »
   directPayment: null,
+  // Communs aux deux modes
   months: 240,
-  annualRate: 3.5
+  annualRate: 3.5,
+  insuranceRate: null,
+  insuranceMode: 'initial',
+  // Le bien visé. L'apport d'exemple couvre les frais de notaire : le premier écran montre un prix, pas 0 €.
+  personalContribution: 25000,
+  agencyFees: null,
+  agencyFeesMode: '€',
+  propertyType: 'ancien'
 }
 
-// --- State ---
-const inputMode = ref(DEFAULTS.inputMode)
+// --- State --- (saisie conservée d'une visite à l'autre)
+const { state, reset } = usePersistedState('capacity', DEFAULTS)
+const {
+  inputMode, monthlyIncome, monthlyCharges, debtRatio, directPayment, months, annualRate,
+  insuranceRate, insuranceMode, personalContribution, agencyFees, agencyFeesMode, propertyType
+} = toRefs(state)
 
-// Mode "Par revenus"
-const monthlyIncome = ref(DEFAULTS.monthlyIncome)
-const monthlyCharges = ref(DEFAULTS.monthlyCharges)
-const debtRatio = ref(DEFAULTS.debtRatio)
+const { current, save, update } = useSavedSimulation('capacity', () => {
+  const params = {
+    inputMode: inputMode.value,
+    months: months.value,
+    annualRate: annualRate.value,
+    insuranceRate: insuranceRate.value,
+    insuranceMode: insuranceMode.value,
+    personalContribution: personalContribution.value,
+    agencyFees: agencyFees.value,
+    agencyFeesMode: agencyFeesMode.value,
+    propertyType: propertyType.value
+  }
+  if (inputMode.value === 'income') {
+    params.monthlyIncome = monthlyIncome.value
+    params.monthlyCharges = monthlyCharges.value
+    params.debtRatio = debtRatio.value
+  } else {
+    params.directPayment = directPayment.value
+  }
+  return params
+})
 
-// Mode "Mensualité connue"
-const directPayment = ref(DEFAULTS.directPayment)
-
-// Communs aux deux modes
-const months = ref(DEFAULTS.months)
-const annualRate = ref(DEFAULTS.annualRate)
-const insuranceRate = ref(null)
-
-// Le bien visé
-const personalContribution = ref(0)
-const agencyFees = ref(null)
-const agencyFeesMode = ref('€')
-const propertyType = ref('ancien')
-
-// Une simulation de l'historique remplace toute la saisie. L'onglet reste en mémoire (KeepAlive) :
-// un champ absent ou vide dans la simulation reprend la valeur de départ, jamais ce qui était saisi juste avant.
+// Une simulation de l'historique remplace toute la saisie : un champ absent ou vide dans la simulation
+// reprend la valeur de départ, jamais ce qui était saisi juste avant.
 watch(() => props.loadParams, (p) => {
   if (!p) return
   inputMode.value = p.inputMode ?? DEFAULTS.inputMode // absent des simulations antérieures au mode « mensualité connue »
@@ -207,6 +229,7 @@ watch(() => props.loadParams, (p) => {
   months.value = sanitizeMonths(p.months) ?? DEFAULTS.months
   annualRate.value = p.annualRate ?? DEFAULTS.annualRate
   insuranceRate.value = p.insuranceRate ?? null
+  insuranceMode.value = p.insuranceMode ?? 'initial' // absent avant la v2.6.3
   // Le bien visé n'est enregistré que depuis la v2.6.0 : une simulation plus ancienne ne le connaît pas
   // et garde donc celui en cours ; une simulation récente le restaure tel quel, champs vides compris.
   if ('personalContribution' in p) {
@@ -215,7 +238,13 @@ watch(() => props.loadParams, (p) => {
     agencyFeesMode.value = p.agencyFeesMode ?? '€'
     propertyType.value = p.propertyType ?? 'ancien'
   }
+  current.value = p.source ?? null
 }, { immediate: true })
+
+function onReset() {
+  reset()
+  current.value = null
+}
 
 // --- Computed ---
 const isValid = computed(() => {
@@ -264,29 +293,8 @@ function onSimulate() {
     principal: capacity.value,
     annualRate: annualRate.value,
     months: months.value,
-    insuranceRate: insuranceRate.value
-  })
-}
-
-// Lève une erreur en cas d'échec : SaveSimulation l'affiche et garde la modale ouverte
-function onSave(name) {
-  const params = {
-    inputMode: inputMode.value,
-    months: months.value,
-    annualRate: annualRate.value,
     insuranceRate: insuranceRate.value,
-    personalContribution: personalContribution.value,
-    agencyFees: agencyFees.value,
-    agencyFeesMode: agencyFeesMode.value,
-    propertyType: propertyType.value
-  }
-  if (inputMode.value === 'income') {
-    params.monthlyIncome = monthlyIncome.value
-    params.monthlyCharges = monthlyCharges.value
-    params.debtRatio = debtRatio.value
-  } else {
-    params.directPayment = directPayment.value
-  }
-  return saveSimulation(name, 'capacity', params)
+    insuranceMode: insuranceMode.value
+  })
 }
 </script>

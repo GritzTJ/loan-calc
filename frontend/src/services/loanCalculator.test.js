@@ -10,6 +10,8 @@ import {
   formatDuration,
   formatPercent,
   sanitizeMonths,
+  summarizeByYear,
+  formatEuros,
   MAX_LOAN_MONTHS
 } from './loanCalculator.js'
 
@@ -212,5 +214,92 @@ describe('formatPercent', () => {
   it('utilise la virgule décimale française', () => {
     expect(formatPercent(3.5)).toMatch(/^3,5\s%$/)
     expect(formatPercent(35)).toMatch(/^35\s%$/)
+  })
+})
+
+describe('tableau d\'amortissement : cas limites et assurance', () => {
+  const start = new Date(2026, 9, 2)
+
+  it('s\'arrête quand le prêt est soldé, sans échéance négative', () => {
+    // 1 000 € sur 50 ans : la mensualité arrondie solde le prêt avant la 600e échéance
+    const table = generateAmortizationTable(1000, 4.85, 600, start)
+    expect(table.length).toBeLessThan(600)
+    expect(table.every(r => r.principalPart >= 0 && r.payment > 0)).toBe(true)
+    expect(table.at(-1).remainingPrincipal).toBe(0)
+    const repaid = table.reduce((sum, r) => sum + r.principalPart, 0)
+    expect(Math.round(repaid * 100) / 100).toBe(1000)
+  })
+
+  it('assurance sur capital initial : cotisation constante', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, { insuranceRate: 0.3, insuranceMode: 'initial' })
+    expect(table[0].insurancePart).toBe(50)
+    expect(table.at(-1).insurancePart).toBe(50)
+    expect(table[0].totalPayment).toBe(1209.92)
+  })
+
+  it('assurance sur capital restant dû : même première cotisation, puis dégressive', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start, { insuranceRate: 0.3, insuranceMode: 'crd' })
+    expect(table[0].insurancePart).toBe(50)
+    expect(table[1].insurancePart).toBeLessThan(50)
+    expect(table.at(-1).insurancePart).toBeLessThan(1)
+    const total = table.reduce((sum, r) => sum + r.insurancePart, 0)
+    expect(total).toBeLessThan(50 * 240)
+  })
+
+  it('sans assurance, le total de la ligne est la mensualité de crédit', () => {
+    const table = generateAmortizationTable(200000, 3.5, 240, start)
+    expect(table[0].insurancePart).toBe(0)
+    expect(table[0].totalPayment).toBe(table[0].payment)
+  })
+
+  it('summarizeByYear regroupe 12 échéances par année', () => {
+    const table = generateAmortizationTable(200000, 3.5, 246, start, { insuranceRate: 0.3 })
+    const years = summarizeByYear(table)
+    expect(years).toHaveLength(21)
+    expect(years[0].rows).toHaveLength(12)
+    expect(years[20].rows).toHaveLength(6)
+    expect(years[0].remainingPrincipal).toBe(table[11].remainingPrincipal)
+    expect(years[20].remainingPrincipal).toBe(0)
+    const principal = years.reduce((sum, y) => sum + y.principal, 0)
+    expect(Math.round(principal * 100) / 100).toBe(200000)
+    expect(years[0].insurance).toBe(600)
+  })
+})
+
+describe('cas limites du plan de financement', () => {
+  it('capacité : des frais d\'agence fixes supérieurs au budget ne laissent rien à emprunter', () => {
+    const r = calculateMaxPropertyPrice(80000, 5000, 'ancien', 500000, '€')
+    expect(r.maxPrice).toBe(0)
+    expect(r.loanUsed).toBe(0)
+    expect(r.agencyFees).toBe(0)
+    expect(r.feesExceedBudget).toBe(true)
+  })
+
+  it('capacité : fullCapacityPrice est le prix atteint quand l\'apport vaut minApportNeeded', () => {
+    for (const [fees, mode] of [[0, '€'], [9000, '€'], [4, '%']]) {
+      const r = calculateMaxPropertyPrice(200000, 0, 'ancien', fees, mode)
+      const atThreshold = calculateMaxPropertyPrice(200000, r.minApportNeeded, 'ancien', fees, mode)
+      expect(Math.abs(atThreshold.maxPrice - r.fullCapacityPrice)).toBeLessThan(0.5)
+    }
+  })
+
+  it('projet : un apport supérieur au coût total laisse un excédent', () => {
+    const r = calculateLoanAmount(150000, 'ancien', 0, '€', 400000, 0)
+    expect(r.loanAmount).toBe(0)
+    expect(r.totalCost).toBe(162000)
+    expect(r.surplus).toBe(238000)
+    expect(r.contributionUsed).toBe(162000)
+  })
+
+  it('projet : pas d\'excédent quand l\'apport est entièrement utilisé', () => {
+    const r = calculateLoanAmount(300000, 'ancien', 0, '€', 30000, 0)
+    expect(r.surplus).toBe(0)
+    expect(r.contributionUsed).toBe(30000)
+  })
+})
+
+describe('formatEuros', () => {
+  it('arrondit à l\'euro', () => {
+    expect(formatEuros(241396.08).replace(/\s/g, ' ')).toBe('241 396 €')
   })
 })

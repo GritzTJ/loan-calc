@@ -23,6 +23,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { parseNumberInput } from '../services/numberParsing.js'
 
 // Les attributs (id, aria-*) vont sur l'<input>, pas sur le conteneur
 defineOptions({ inheritAttrs: false })
@@ -54,14 +55,6 @@ function formatNumber(value) {
   return parts[0]
 }
 
-// Parse une chaîne en nombre : accepte espaces, virgule ou point décimal
-function parseInput(str) {
-  if (!str) return null
-  const cleaned = str.replace(/[\s ]/g, '').replace(',', '.')
-  const num = parseFloat(cleaned)
-  return isNaN(num) ? null : num
-}
-
 // Saisie brute correspondant à un nombre (virgule comme séparateur décimal)
 function toRawInput(value) {
   return String(value).replace('.', ',')
@@ -88,17 +81,15 @@ function onFocus() {
 
 function onInput(event) {
   rawInput.value = event.target.value
-  const parsed = parseInput(event.target.value)
+  const { value, rewritten } = parseNumberInput(event.target.value, props.decimals)
 
-  if (parsed !== null) {
-    const rounded = props.decimals > 0
-      ? Math.round(parsed * Math.pow(10, props.decimals)) / Math.pow(10, props.decimals)
-      : Math.round(parsed)
-    const clamped = clamp(rounded)
-    // Hors bornes : le champ montre tout de suite la valeur retenue, pas celle tapée.
-    // On écrit aussi directement dans le champ : si la valeur retenue est celle d'avant la frappe
-    // (« 600 » puis « 0 » avec un maximum de 600), rien ne change côté Vue et il n'y aurait pas de nouveau rendu.
-    if (clamped !== rounded) {
+  if (value !== null) {
+    const clamped = clamp(value)
+    // Hors bornes, ou décimales tapées dans un champ entier : le champ montre tout de suite la valeur
+    // retenue, pas celle tapée. On écrit aussi directement dans le champ : si la valeur retenue est celle
+    // d'avant la frappe (« 600 » puis « 0 » avec un maximum de 600), rien ne change côté Vue et il n'y aurait
+    // pas de nouveau rendu.
+    if (clamped !== value || rewritten) {
       rawInput.value = toRawInput(clamped)
       event.target.value = rawInput.value
     }

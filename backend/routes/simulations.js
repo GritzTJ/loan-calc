@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import db from '../db.js'
+import db, { SIMULATION_TYPES } from '../db.js'
 
 const router = Router()
 
@@ -29,26 +29,62 @@ router.get('/', (req, res) => {
   res.json(simulations)
 })
 
+// Validation commune à la création et à la modification. Renvoie le message d'erreur, ou null.
+function nameError(name) {
+  return typeof name !== 'string' || !name.trim() || name.length > MAX_NAME_LENGTH
+    ? `name doit être un texte de 1 à ${MAX_NAME_LENGTH} caractères`
+    : null
+}
+function paramsError(params) {
+  return params === null || typeof params !== 'object' || Array.isArray(params)
+    ? 'params doit être un objet'
+    : null
+}
+
+function findSimulation(id) {
+  const row = db.prepare(`SELECT ${COLUMNS} FROM simulations WHERE id = ?`).get(id)
+  return row && { ...row, params: JSON.parse(row.params) }
+}
+
 // POST /api/simulations — crée une simulation
 router.post('/', (req, res) => {
   const { name, type, params } = req.body
 
-  if (typeof name !== 'string' || !name.trim() || name.length > MAX_NAME_LENGTH) {
-    return res.status(400).json({ error: `name doit être un texte de 1 à ${MAX_NAME_LENGTH} caractères` })
+  if (!SIMULATION_TYPES.includes(type)) {
+    return res.status(400).json({ error: `type doit être l'un de : ${SIMULATION_TYPES.join(', ')}` })
   }
-  if (!['loan', 'capacity'].includes(type)) {
-    return res.status(400).json({ error: 'type doit être "loan" ou "capacity"' })
-  }
-  if (params === null || typeof params !== 'object' || Array.isArray(params)) {
-    return res.status(400).json({ error: 'params doit être un objet' })
-  }
+  const error = nameError(name) || paramsError(params)
+  if (error) return res.status(400).json({ error })
 
   const result = db.prepare(
     'INSERT INTO simulations (name, type, params) VALUES (?, ?, ?)'
   ).run(name.trim(), type, JSON.stringify(params))
 
-  const simulation = db.prepare(`SELECT ${COLUMNS} FROM simulations WHERE id = ?`).get(result.lastInsertRowid)
-  res.status(201).json({ ...simulation, params: JSON.parse(simulation.params) })
+  res.status(201).json(findSimulation(result.lastInsertRowid))
+})
+
+// PATCH /api/simulations/:id — renomme une simulation et/ou remplace ses paramètres.
+// Le type ne change pas : il désigne l'onglet qui sait relire les paramètres.
+router.patch('/:id', (req, res) => {
+  const id = Number(req.params.id)
+  const { name, params } = req.body
+
+  if (name === undefined && params === undefined) {
+    return res.status(400).json({ error: 'name ou params attendu' })
+  }
+  const error = (name !== undefined && nameError(name)) || (params !== undefined && paramsError(params))
+  if (error) return res.status(400).json({ error })
+
+  // COALESCE : un champ non transmis (NULL) garde sa valeur
+  const result = Number.isInteger(id)
+    ? db.prepare('UPDATE simulations SET name = COALESCE(?, name), params = COALESCE(?, params) WHERE id = ?')
+      .run(name === undefined ? null : name.trim(), params === undefined ? null : JSON.stringify(params), id)
+    : { changes: 0 }
+
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'Simulation introuvable' })
+  }
+  res.json(findSimulation(id))
 })
 
 // DELETE /api/simulations/:id — supprime une simulation

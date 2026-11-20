@@ -6,7 +6,7 @@
       :key="option.value"
       type="button"
       :aria-pressed="modelValue === option.value"
-      class="rounded-md font-medium transition-colors"
+      class="rounded-md font-medium whitespace-nowrap transition-colors"
       :class="[
         size === 'sm' ? 'px-2.5 h-7 text-xs' : 'flex-1 px-3 h-10 text-sm',
         modelValue === option.value

@@ -17,7 +17,18 @@
     @cancel="onCancel"
   >
     <form class="p-6" @submit.prevent="onSubmit">
-      <h3 :id="titleId" class="text-lg font-semibold mb-4">Nommer la simulation</h3>
+      <h3 :id="titleId" class="text-lg font-semibold mb-4">
+        {{ current ? 'Enregistrer' : 'Nommer la simulation' }}
+      </h3>
+
+      <!-- Simulation ouverte depuis l'historique : la mettre à jour est l'action attendue, la copie reste possible -->
+      <template v-if="current">
+        <button type="button" class="btn btn-primary w-full" :disabled="saving" @click="onUpdate">
+          <span class="truncate">{{ saving === 'update' ? 'Mise à jour…' : `Mettre à jour « ${current.name} »` }}</span>
+        </button>
+        <p class="mt-5 mb-2 text-sm text-ink-2">Ou enregistrer une copie sous un autre nom :</p>
+      </template>
+
       <input
         v-model="name"
         type="text"
@@ -25,7 +36,7 @@
         :placeholder="placeholder"
         :maxlength="MAX_NAME_LENGTH"
         aria-label="Nom de la simulation"
-        autofocus
+        :autofocus="!current"
       />
       <p v-if="error" role="alert" class="mt-2 text-sm text-danger">
         {{ error.message }}
@@ -33,8 +44,8 @@
       </p>
       <div class="flex gap-2 justify-end mt-5">
         <button type="button" class="btn btn-quiet" :disabled="saving" @click="close">Annuler</button>
-        <button type="submit" class="btn btn-primary" :disabled="!name.trim() || saving">
-          {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
+        <button type="submit" class="btn" :class="current ? 'btn-secondary' : 'btn-primary'" :disabled="!name.trim() || saving">
+          {{ saving === 'create' ? 'Enregistrement…' : (current ? 'Enregistrer une copie' : 'Enregistrer') }}
         </button>
       </div>
     </form>
@@ -46,8 +57,12 @@ import { ref, useId, onUnmounted } from 'vue'
 
 const props = defineProps({
   placeholder: { type: String, default: '' },
-  // Fonction async (name) => Promise : lève une erreur si l'enregistrement échoue
-  save: { type: Function, required: true }
+  // Fonction async (name) => Promise : crée une simulation, lève une erreur en cas d'échec
+  save: { type: Function, required: true },
+  // Simulation ouverte depuis l'historique ({ id, name }) : propose de la mettre à jour
+  current: { type: Object, default: null },
+  // Fonction async () => Promise : met à jour `current`, lève une erreur en cas d'échec
+  update: { type: Function, default: null }
 })
 
 // Même limite que le backend (routes/simulations.js)
@@ -57,7 +72,7 @@ const SAVED_FEEDBACK_MS = 2500
 const titleId = useId()
 const dialogRef = ref(null)
 const name = ref('')
-const saving = ref(false)
+const saving = ref(false) // false | 'create' | 'update'
 const error = ref(null)
 const justSaved = ref(false)
 let savedTimer = null
@@ -79,12 +94,13 @@ function onCancel(event) {
   if (saving.value) event.preventDefault()
 }
 
-async function onSubmit() {
-  if (!name.value.trim() || saving.value) return
-  saving.value = true
+// Création ou mise à jour : même déroulé, seule l'action change
+async function run(kind, action) {
+  if (saving.value) return
+  saving.value = kind
   error.value = null
   try {
-    await props.save(name.value.trim())
+    await action()
     name.value = ''
     dialogRef.value.close()
     // Confirmation visible sur le bouton : la modale fermée ne suffit pas à dire que c'est enregistré
@@ -97,6 +113,15 @@ async function onSubmit() {
   } finally {
     saving.value = false
   }
+}
+
+function onSubmit() {
+  if (!name.value.trim()) return
+  return run('create', () => props.save(name.value.trim()))
+}
+
+function onUpdate() {
+  return run('update', () => props.update())
 }
 
 onUnmounted(() => clearTimeout(savedTimer))

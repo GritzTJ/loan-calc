@@ -22,21 +22,38 @@ export function calculateMonthlyPayment(principal, annualRate, months) {
   return Math.round(payment * 100) / 100
 }
 
+// Modes de calcul de l'assurance emprunteur
+//   initial : cotisation fixe, sur le capital emprunté (contrat groupe de la banque)
+//   crd     : cotisation sur le capital restant dû, donc dégressive (délégation d'assurance)
+export const INSURANCE_MODES = [
+  { value: 'initial', label: 'Capital initial' },
+  { value: 'crd', label: 'Restant dû' }
+]
+
 /**
  * Génère le tableau d'amortissement complet.
  * La 1re mensualité tombe le 1er du mois suivant la date de début.
+ *
+ * La mensualité étant arrondie au centime, le prêt peut être soldé un peu avant ou un peu après
+ * l'échéance théorique : la part de capital est plafonnée au restant dû, le tableau s'arrête dès que
+ * le prêt est soldé, et la dernière échéance absorbe l'écart d'arrondi.
+ *
  * @param {number} principal - Montant emprunté (€)
  * @param {number} annualRate - Taux annuel (%)
  * @param {number} months - Nombre de mensualités
  * @param {Date} startDate - Date de début du prêt
- * @returns {Array<Object>} Tableau d'amortissement
+ * @param {{ insuranceRate?: number, insuranceMode?: 'initial'|'crd' }} [insurance] - Assurance emprunteur
+ * @returns {Array<Object>} Lignes { number, date, remainingPrincipal, principalPart, interestPart,
+ *   payment (crédit seul), insurancePart, totalPayment (crédit + assurance) }
  */
-export function generateAmortizationTable(principal, annualRate, months, startDate) {
+export function generateAmortizationTable(principal, annualRate, months, startDate, insurance = {}) {
   const monthlyPayment = calculateMonthlyPayment(principal, annualRate, months)
   if (monthlyPayment === 0) return []
 
   const monthlyRate = annualRate / 100 / 12
-  let remainingPrincipal = principal
+  const insuranceMonthlyRate = (insurance.insuranceRate || 0) / 100 / 12
+  const insuranceOnRemaining = insurance.insuranceMode === 'crd'
+  let remainingPrincipal = Math.round(principal * 100) / 100
   const table = []
 
   // La 1re mensualité tombe le 1er du mois suivant la date de début
@@ -45,20 +62,17 @@ export function generateAmortizationTable(principal, annualRate, months, startDa
   for (let i = 0; i < months; i++) {
     const date = new Date(firstPaymentDate.getFullYear(), firstPaymentDate.getMonth() + i, 1)
     const interestPart = Math.round(remainingPrincipal * monthlyRate * 100) / 100
+    const insuranceBase = insuranceOnRemaining ? remainingPrincipal : principal
+    const insurancePart = Math.round(insuranceBase * insuranceMonthlyRate * 100) / 100
 
-    // Dernière mensualité : ajustement pour solder exactement le capital
-    const isLast = i === months - 1
-    const principalPart = isLast
-      ? remainingPrincipal
-      : Math.round((monthlyPayment - interestPart) * 100) / 100
+    // Part de capital de la mensualité constante (jamais négative, même si l'arrondi la rend inférieure aux intérêts)
+    const regularPrincipalPart = Math.max(0, Math.round((monthlyPayment - interestPart) * 100) / 100)
+    // Dernière échéance : la dernière prévue, ou celle qui solde le prêt en avance
+    const isLast = i === months - 1 || regularPrincipalPart >= remainingPrincipal
+    const principalPart = isLast ? remainingPrincipal : regularPrincipalPart
+    const payment = isLast ? Math.round((principalPart + interestPart) * 100) / 100 : monthlyPayment
 
-    const actualPayment = isLast
-      ? Math.round((principalPart + interestPart) * 100) / 100
-      : monthlyPayment
-
-    remainingPrincipal = isLast
-      ? 0
-      : Math.round((remainingPrincipal - principalPart) * 100) / 100
+    remainingPrincipal = isLast ? 0 : Math.round((remainingPrincipal - principalPart) * 100) / 100
 
     table.push({
       number: i + 1,
@@ -66,11 +80,38 @@ export function generateAmortizationTable(principal, annualRate, months, startDa
       remainingPrincipal,
       principalPart,
       interestPart,
-      payment: actualPayment
+      payment,
+      insurancePart,
+      totalPayment: Math.round((payment + insurancePart) * 100) / 100
     })
+    if (isLast) break
   }
 
   return table
+}
+
+/**
+ * Regroupe le tableau d'amortissement par année de prêt (12 échéances).
+ * @param {Array<Object>} rows - Lignes de generateAmortizationTable
+ * @returns {Array<Object>} { year, principal, interest, insurance, total, remainingPrincipal (en fin d'année), rows }
+ */
+export function summarizeByYear(rows) {
+  const years = []
+  for (const row of rows) {
+    const year = Math.ceil(row.number / 12)
+    if (!years[year - 1]) {
+      years[year - 1] = { year, principal: 0, interest: 0, insurance: 0, total: 0, remainingPrincipal: 0, rows: [] }
+    }
+    const y = years[year - 1]
+    y.principal += row.principalPart
+    y.interest += row.interestPart
+    y.insurance += row.insurancePart
+    y.total += row.totalPayment
+    y.remainingPrincipal = row.remainingPrincipal
+    y.rows.push(row)
+  }
+  const round = (x) => Math.round(x * 100) / 100
+  return years.map(y => ({ ...y, principal: round(y.principal), interest: round(y.interest), insurance: round(y.insurance), total: round(y.total) }))
 }
 
 /**
@@ -114,7 +155,9 @@ export function calculateBorrowingCapacity(monthlyPayment, annualRate, months, i
 // Bornes de saisie. Sans plafond de durée, un montant tapé par erreur dans le champ « durée »
 // génère un tableau d'amortissement de centaines de milliers de lignes et fige le navigateur.
 export const MAX_LOAN_MONTHS = 600 // 50 ans
-export const MAX_RATE = 100        // %
+// 30 % : très au-dessus de tout taux réel. Au-delà, la mensualité arrondie ne couvre plus que les intérêts
+// et le tableau d'amortissement dégénère (tout le capital sur la dernière échéance).
+export const MAX_RATE = 30         // %
 
 /**
  * Ramène une durée venue d'ailleurs que du formulaire (simulation de l'historique) dans les bornes
@@ -138,6 +181,10 @@ export const PROPERTY_TYPES = [
   { value: 'ancien', label: 'Ancien (8 %)' },
   { value: 'neuf', label: 'Neuf (3 %)' }
 ]
+// Hypothèse de calcul des frais de notaire, à dire à l'utilisateur : ils portent sur le prix net vendeur
+// quand les honoraires d'agence sont à la charge de l'acquéreur. À la charge du vendeur, ils portent sur
+// le prix affiché, qui les contient déjà : il suffit alors de saisir ce prix sans frais d'agence.
+export const AGENCY_FEES_HELP = 'S\'ils sont à la charge de l\'acquéreur. À la charge du vendeur, ils sont déjà dans le prix : laissez vide.'
 export const AGENCY_FEES_MODES = [
   { value: '€', label: '€ fixe' },
   { value: '%', label: '% du prix' }
@@ -163,6 +210,8 @@ export const AGENCY_FEES_MODES = [
  *   c1 / c2 : valeurs des deux contraintes (exposées pour les tooltips)
  *   minApportNeeded : apport à partir duquel toute la capacité d'emprunt est utilisable
  *   loanUsed / unusedCapacity : part de la capacité réellement empruntée, et le reste
+ *   fullCapacityPrice : prix accessible si l'apport atteignait minApportNeeded
+ *   feesExceedBudget : les frais d'agence fixes dépassent tout le budget
  */
 export function calculateMaxPropertyPrice(borrowingCapacity, personalContribution, propertyType, agencyFees = 0, agencyFeesMode = '€') {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
@@ -203,12 +252,22 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
 
   // Prêt réellement mobilisé : quand l'apport limite le prix, il ne couvre que les frais de notaire
   // et le prêt finance exactement le prix FAI. Sinon toute la capacité est utilisée.
-  const loanUsed = isApportConstrained
+  // Aucun bien accessible (ex. frais d'agence fixes supérieurs au budget) : rien n'est emprunté.
+  let loanUsed = isApportConstrained
     ? Math.round((maxPrice + agencyFeesAmount) * 100) / 100
     : borrowingCapacity
+  if (maxPrice === 0) loanUsed = 0
   const unusedCapacity = Math.round((borrowingCapacity - loanUsed) * 100) / 100
 
-  return { maxPrice, notaryFees, totalBudget, agencyFees: agencyFeesAmount, isApportConstrained, minApportNeeded, c1, c2, loanUsed, unusedCapacity }
+  // Des frais d'agence fixes qui absorbent tout le budget : à signaler, ce n'est pas un manque d'apport
+  const feesExceedBudget = agencyFeesMode !== '%' && agencyFeesAmount > 0 && totalBudget - agencyFeesAmount <= 0
+
+  // Prix atteignable avec l'apport « minApportNeeded » : le prêt finance alors tout le prix FAI
+  const fullCapacityPrice = agencyFeesMode === '%'
+    ? Math.round(borrowingCapacity / (1 + (agencyFees || 0) / 100) * 100) / 100
+    : Math.max(0, Math.round((borrowingCapacity - agencyFeesAmount) * 100) / 100)
+
+  return { maxPrice, notaryFees, totalBudget, agencyFees: maxPrice === 0 ? 0 : agencyFeesAmount, isApportConstrained, minApportNeeded, c1, c2, loanUsed, unusedCapacity, feesExceedBudget, fullCapacityPrice }
 }
 
 /**
@@ -229,7 +288,8 @@ export function calculateMaxPropertyPrice(borrowingCapacity, personalContributio
  * @param {'€'|'%'} agencyFeesMode      - Mode de saisie des frais d'agence
  * @param {number} personalContribution  - Apport personnel (€)
  * @param {number} applicationFees       - Frais de dossier bancaire (€), optionnel
- * @returns {{ loanAmount, notaryFees, agencyFees, applicationFees, totalCost, fundingGap }}
+ * @returns {{ loanAmount, notaryFees, agencyFees, applicationFees, totalCost, fundingGap, surplus, contributionUsed }}
+ *   surplus : part de l'apport qui dépasse le coût total ; contributionUsed : apport réellement mobilisé
  */
 export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0, agencyFeesMode = '€', personalContribution = 0, applicationFees = 0) {
   const notaryRate = NOTARY_FEES[propertyType] || NOTARY_FEES.ancien
@@ -251,7 +311,11 @@ export function calculateLoanAmount(propertyPrice, propertyType, agencyFees = 0,
   // Apport manquant pour couvrir la partie non finançable (notaire + dossier)
   const fundingGap = Math.max(0, Math.round((notaryFees + appFees - personalContribution) * 100) / 100)
 
-  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, applicationFees: appFees, totalCost, fundingGap }
+  // Apport supérieur au coût total : rien à emprunter, et une partie de l'apport reste disponible
+  const surplus = Math.max(0, Math.round((personalContribution - totalCost) * 100) / 100)
+  const contributionUsed = Math.round((personalContribution - surplus) * 100) / 100
+
+  return { loanAmount, notaryFees, agencyFees: agencyFeesAmount, applicationFees: appFees, totalCost, fundingGap, surplus, contributionUsed }
 }
 
 /**
@@ -297,6 +361,20 @@ export function formatCurrency(amount) {
   return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
     currency: 'EUR'
+  }).format(amount)
+}
+
+/**
+ * Formate un montant à l'euro près (ex: "241 396 €"). Pour les grands montants (capital, prix, totaux),
+ * où les centimes n'apportent rien ; les mensualités gardent formatCurrency.
+ * @param {number} amount
+ * @returns {string}
+ */
+export function formatEuros(amount) {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0
   }).format(amount)
 }
 

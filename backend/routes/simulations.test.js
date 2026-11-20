@@ -83,3 +83,43 @@ test('GET ignore une ligne dont les params sont illisibles au lieu d\'échouer',
   assert.ok(names.includes('saine'))
   assert.ok(!names.includes('corrompue'))
 })
+
+function patch(id, body) {
+  return fetch(`${baseUrl}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+test('POST accepte une simulation de type project', async () => {
+  const res = await post({ name: 'Maison', type: 'project', params: { propertyPrice: 300000 } })
+  assert.equal(res.status, 201)
+  assert.equal((await res.json()).type, 'project')
+})
+
+test('PATCH renomme sans toucher aux params', async () => {
+  const sim = await (await post({ name: 'avant', type: 'loan', params: loanParams })).json()
+  const res = await patch(sim.id, { name: '  après  ' })
+  assert.equal(res.status, 200)
+  const updated = await res.json()
+  assert.equal(updated.name, 'après')
+  assert.deepEqual(updated.params, loanParams)
+  assert.equal(updated.created_at, sim.created_at)
+})
+
+test('PATCH remplace les params sans toucher au nom', async () => {
+  const sim = await (await post({ name: 'stable', type: 'loan', params: loanParams })).json()
+  const updated = await (await patch(sim.id, { params: { principal: 1 } })).json()
+  assert.equal(updated.name, 'stable')
+  assert.deepEqual(updated.params, { principal: 1 })
+})
+
+test('PATCH refuse un corps vide ou invalide, et répond 404 sur un id inconnu', async () => {
+  const sim = await (await post({ name: 'x', type: 'loan', params: loanParams })).json()
+  assert.equal((await patch(sim.id, {})).status, 400)
+  assert.equal((await patch(sim.id, { name: '' })).status, 400)
+  assert.equal((await patch(sim.id, { params: [1] })).status, 400)
+  assert.equal((await patch(999999, { name: 'y' })).status, 404)
+  assert.equal((await patch('abc', { name: 'y' })).status, 404)
+})

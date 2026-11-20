@@ -1,7 +1,7 @@
 <template>
   <div class="mb-6">
     <h4 class="text-sm font-medium text-ink mb-2">
-      Part de capital et d'intérêts {{ isYearly ? 'par année' : 'par mensualité' }}
+      Ce que vous payez chaque année
     </h4>
     <div class="h-64 sm:h-80">
       <Bar :data="chartData" :options="chartOptions" />
@@ -26,43 +26,13 @@ import { formatCurrency } from '../services/loanCalculator.js'
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
 const props = defineProps({
-  rows: { type: Array, default: () => [] }
+  // Années du prêt (summarizeByYear)
+  years: { type: Array, default: () => [] }
 })
 
 const { isDark } = useIsDark()
 
-// Seuil au-delà duquel on agrège par année
-const MONTHLY_THRESHOLD = 120
-
-const isYearly = computed(() => props.rows.length > MONTHLY_THRESHOLD)
-
-const aggregatedData = computed(() => {
-  if (!isYearly.value) {
-    return {
-      labels: props.rows.map(r => `${r.number}`),
-      principals: props.rows.map(r => r.principalPart),
-      interests: props.rows.map(r => r.interestPart)
-    }
-  }
-
-  // Agrégation par année
-  const years = new Map()
-  for (const row of props.rows) {
-    const yearNum = Math.ceil(row.number / 12)
-    if (!years.has(yearNum)) {
-      years.set(yearNum, { principal: 0, interest: 0 })
-    }
-    const y = years.get(yearNum)
-    y.principal += row.principalPart
-    y.interest += row.interestPart
-  }
-
-  return {
-    labels: [...years.keys()].map(y => `An ${y}`),
-    principals: [...years.values()].map(y => Math.round(y.principal * 100) / 100),
-    interests: [...years.values()].map(y => Math.round(y.interest * 100) / 100)
-  }
-})
+const hasInsurance = computed(() => props.years.some(y => y.insurance > 0))
 
 // Chart.js dessine dans un canvas : il ne voit pas les classes Tailwind. On lit donc les jetons
 // de couleur (main.css) au moment du rendu. La dépendance à isDark force la relecture au changement de thème.
@@ -73,6 +43,7 @@ const palette = computed(() => {
   return {
     capital: token('capital'),
     interest: token('interest'),
+    insurance: token('insurance'),
     surface: token('bg'),
     text: token('ink-2'),
     grid: token('line')
@@ -82,13 +53,14 @@ const palette = computed(() => {
 const chartData = computed(() => {
   // Liseré couleur de fond : sépare les deux parts empilées et les barres voisines
   const bar = { borderColor: palette.value.surface, borderWidth: 1, borderRadius: 2 }
-  return {
-    labels: aggregatedData.value.labels,
-    datasets: [
-      { ...bar, label: 'Capital', data: aggregatedData.value.principals, backgroundColor: palette.value.capital },
-      { ...bar, label: 'Intérêts', data: aggregatedData.value.interests, backgroundColor: palette.value.interest }
-    ]
+  const datasets = [
+    { ...bar, label: 'Capital', data: props.years.map(y => y.principal), backgroundColor: palette.value.capital },
+    { ...bar, label: 'Intérêts', data: props.years.map(y => y.interest), backgroundColor: palette.value.interest }
+  ]
+  if (hasInsurance.value) {
+    datasets.push({ ...bar, label: 'Assurance', data: props.years.map(y => y.insurance), backgroundColor: palette.value.insurance })
   }
+  return { labels: props.years.map(y => `An ${y.year}`), datasets }
 })
 
 const chartOptions = computed(() => {

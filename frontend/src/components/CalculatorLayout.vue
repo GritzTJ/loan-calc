@@ -17,6 +17,10 @@
       <!-- Une colonne sur téléphone, deux sur tablette, une colonne étroite à côté du résultat sur grand écran -->
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <slot name="form" />
+        <!-- La saisie est conservée d'une visite à l'autre : il faut un moyen de repartir de l'exemple de départ -->
+        <div v-if="resettable" class="sm:col-span-2 lg:col-span-1">
+          <button type="button" class="btn btn-quiet -ml-4" @click="emit('reset')">Réinitialiser la saisie</button>
+        </div>
       </div>
 
       <div class="mt-6 lg:mt-0 lg:sticky lg:top-24">
@@ -39,6 +43,10 @@ defineProps({
   // true quand la saisie permet un calcul
   ready: { type: Boolean, default: false },
   // Ce qu'il manque pour obtenir un résultat
-  emptyHint: { type: String, default: '' }
+  emptyHint: { type: String, default: '' },
+  // Affiche le bouton « Réinitialiser » (émet reset)
+  resettable: { type: Boolean, default: false }
 })
+
+const emit = defineEmits(['reset'])
 </script>

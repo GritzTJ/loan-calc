@@ -131,6 +131,10 @@
   .notice-warn {
     @apply border-warn-line bg-warn-soft text-warn-ink;
   }
+  /* Information sans alerte (ex. apport excédentaire) */
+  .notice-info {
+    @apply border-line bg-sunken text-ink;
+  }
   .notice-danger {
     @apply border-danger/40 bg-danger-soft text-danger;
   }

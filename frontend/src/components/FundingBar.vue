@@ -2,7 +2,7 @@
   <div>
     <div v-if="title" class="flex items-baseline justify-between gap-3 mb-1.5">
       <h4 class="text-sm font-medium text-ink">{{ title }}</h4>
-      <span v-if="total !== null" class="figure text-base text-ink">{{ formatCurrency(total) }}</span>
+      <span v-if="total !== null" class="figure text-base text-ink">{{ formatEuros(total) }}</span>
     </div>
 
     <!-- La barre : chaque segment est proportionnel à son montant, sur l'échelle commune `scale` -->
@@ -19,7 +19,7 @@
           activeKey && activeKey !== segment.key ? 'opacity-30' : ''
         ]"
         :style="{ width: `${segment.value / effectiveScale * 100}%` }"
-        :title="`${segment.label} : ${formatCurrency(segment.value)}`"
+        :title="`${segment.label} : ${formatEuros(segment.value)}`"
         @pointerenter="activeKey = segment.key"
         @pointerleave="activeKey = null"
       ></div>
@@ -48,7 +48,7 @@
             <span>{{ segment.label }}</span>
             <slot :name="`info-${segment.key}`" />
           </span>
-          <span class="figure" :class="segment.color === 'gap' ? 'text-danger' : 'text-ink'">{{ formatCurrency(segment.value) }}</span>
+          <span class="figure" :class="segment.color === 'gap' ? 'text-danger' : 'text-ink'">{{ formatEuros(segment.value) }}</span>
         </li>
       </template>
       <slot name="after" />
@@ -58,7 +58,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { formatCurrency } from '../services/loanCalculator.js'
+import { formatEuros } from '../services/loanCalculator.js'
 
 const props = defineProps({
   title: { type: String, default: '' },
@@ -93,7 +93,7 @@ const sum = computed(() => drawn.value.reduce((acc, segment) => acc + segment.va
 const effectiveScale = computed(() => Math.max(props.scale || 0, sum.value) || 1)
 
 const ariaLabel = computed(() =>
-  drawn.value.map(segment => `${segment.label} ${formatCurrency(segment.value)}`).join(', ')
+  drawn.value.map(segment => `${segment.label} ${formatEuros(segment.value)}`).join(', ')
 )
 </script>
 

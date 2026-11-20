@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.6.2**
+Simulateur de prêt immobilier — usage personnel — **v2.6.3**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -117,8 +117,8 @@ Application installable comme **PWA** sur mobile (icône écran d'accueil, plein
 backend/
   index.js                          — serveur Express (API + static + auth guard)
   auth.js                           — middleware OIDC
-  db.js                             — init SQLite
-  routes/simulations.js             — CRUD simulations
+  db.js                             — init SQLite + migration du schéma (types de simulation)
+  routes/simulations.js             — CRUD simulations (POST, PATCH nom/params, DELETE)
 
 frontend/
   public/icons/                     — icônes PWA (svg + png 192/512/maskable/apple)
@@ -126,7 +126,10 @@ frontend/
     main.js                        — montage Vue + enregistrement du service worker (autoUpdate)
     services/loanCalculator.js     — toutes les formules financières (+ formatage, bornes de saisie)
     services/loanCalculator.test.js — tests Vitest des formules et des règles métier
+    services/numberParsing.js      — analyse de la saisie numérique (« 200.000 », « 1.234,56 »…), testée à part
     services/storageService.js     — appels API REST (lève une `ApiError` en cas d'échec)
+    composables/usePersistedState.js — saisie d'un onglet conservée dans `localStorage` (+ `reset`)
+    composables/useSavedSimulation.js — lien onglet ↔ simulation de l'historique (enregistrer / mettre à jour)
     assets/main.css                — jetons de couleur clair/sombre, police, classes `.input-field` `.btn` `.sheet` `.figure` `.notice`
     components/                     — un composant Vue par onglet + utilitaires
       CalculatorLayout.vue         — mise en page commune : titre, bandeau de résultat collant, formulaire, feuille de résultat
@@ -135,8 +138,10 @@ frontend/
       FormField.vue                — libellé relié à son champ (`for`/`id` via `useId`)
       NumberInput.vue              — saisie numérique formatée, bornée (`min`/`max`), unité dans le champ (`suffix`)
       DurationField.vue            — durée saisie en années ou en mois (le modèle reste en mois)
+      InsuranceField.vue           — taux d'assurance + base de calcul (capital initial / restant dû)
+      AmortizationTable.vue        — tableau par année, chaque année dépliable en mensualités
       SegmentedControl.vue         — groupe de boutons à choix unique
-      SaveSimulation.vue           — bouton « Enregistrer » + modale `<dialog>` (erreur affichée, pas d'échec silencieux)
+      SaveSimulation.vue           — bouton « Enregistrer » + modale `<dialog>` ; propose « Mettre à jour » si la saisie vient de l'historique
       InfoTooltip.vue              — tooltips sur les champs calculés (survol, tap et clavier)
 ```
 
@@ -147,12 +152,15 @@ frontend/
 - **Chiffres** : classe `.figure` (Archivo condensé 75 %, graisse 600, tabulaire). Le texte reste en largeur normale. Pas de capitales, pas de `font-mono`
 - **Mise en page** (`CalculatorLayout`) : < `lg` une colonne, bandeau de résultat collant **en haut** (visible au-dessus du clavier), barre d'onglets fixe en bas ; ≥ `lg` formulaire à gauche, feuille de résultat collante à droite, onglets dans l'en-tête
 - **Champs à 16 px minimum** (`.input-field`) : en dessous, iOS zoome la page au focus
+- **Montants** : `formatEuros` (à l'euro) pour capital, prix, totaux ; `formatCurrency` (centimes) pour les mensualités et les lignes mensuelles du tableau
+- **Saisie conservée** : chaque onglet garde sa saisie dans `localStorage` (`loan-calc:<onglet>`) et démarre sur un exemple ; « Réinitialiser la saisie » y revient. Un nouveau champ d'onglet doit être ajouté aux valeurs de départ passées à `usePersistedState`
+- **Onglet courant dans l'URL** (`?tab=`, `pushState`/`popstate` dans `App.vue`)
 - « Simuler ce prêt » (Capacité, Projet) émet `simulate` → `App.vue` préremplit le Simulateur avec `merge: true` (la saisie non transmise est conservée)
 
 ## Tests
 
-- `cd frontend && npm test` — Vitest sur `loanCalculator.js`
-- `cd backend && npm test` — `node --test` : routeur simulations (base `:memory:`) et `safeReturnTo`
+- `cd frontend && npm test` — Vitest sur `loanCalculator.js` et `numberParsing.js`
+- `cd backend && npm test` — `node --test` : routeur simulations (base `:memory:`), migration du schéma (`db.test.js`) et `safeReturnTo`
 - Les deux suites tournent dans GitHub Actions (job `test`) avant le build de l'image
 
 ## Règles métier à ne pas casser
@@ -166,11 +174,16 @@ frontend/
 - Les **frais de dossier** ne peuvent **pas** être financés par le crédit → apport, comme le notaire (`fundingGap = notaire + dossier − apport`)
 - **Apport pour utiliser toute la capacité** (`minApportNeeded`) = point où C1 = C2 : `notaryRate × (capacité − agence€)` ou `notaryRate × capacité / (1 + agencyRate%)`. Ne pas le calculer comme `notaryRate × C1` (C1 dépend de l'apport)
 - **Capacité avec assurance** : le budget mensuel couvre crédit + assurance → `capital = budget / (k + tauxAssurance/1200)`, `k` = mensualité par euro emprunté
+- **Assurance** : deux bases (`insuranceMode`) — `initial` (cotisation fixe sur le capital emprunté, contrat groupe) ou `crd` (sur le capital restant dû, dégressive, délégation). Le premier mois est identique dans les deux modes, donc la capacité d'emprunt ne dépend pas du mode. Absent d'une ancienne simulation = `initial`
+- **Tableau d'amortissement** = source de tous les totaux (intérêts, assurance). La part de capital est plafonnée au restant dû et le tableau s'arrête quand le prêt est soldé : il peut compter moins de lignes que la durée saisie
+- **Frais de notaire** calculés sur le prix net vendeur (honoraires d'agence à la charge de l'acquéreur) ; à la charge du vendeur, on saisit le prix affiché sans frais d'agence (dit dans l'aide du champ)
+- Taux plafonnés à 30 % (`MAX_RATE`)
+- **Types de simulation** : `loan`, `capacity`, `project` (`SIMULATION_TYPES` dans `backend/db.js`). En ajouter un déclenche la reconstruction de la table au démarrage (SQLite ne modifie pas un `CHECK`)
 - Tous les onglets sont sous `<KeepAlive>` : la saisie est conservée quand on change d'onglet
 
 ## Branches Git
 
-- `main` — version stable (v2.6.2)
+- `main` — version stable (v2.6.3)
 
 ## PWA
 

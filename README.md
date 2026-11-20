@@ -2,13 +2,15 @@
 
 Application web de simulation de prêt immobilier avec cinq modules :
 
-1. **Simulateur de prêt** — Mensualité, tableau d'amortissement, graphique, export Excel
+1. **Simulateur de prêt** — Mensualité, tableau d'amortissement par année (dépliable en mensualités), graphique, export Excel
 2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible
 3. **Projet** — Montant à emprunter pour un bien donné, plan de financement besoins / ressources
 4. **Comparaison de scénarios** — Deux prêts côte à côte avec tableau comparatif
-5. **Historique** — Sauvegarde, rechargement et suppression des simulations
+5. **Historique** — Simulations, capacités et projets enregistrés : ouvrir, mettre à jour, renommer, supprimer
 
-Toutes les calculettes intègrent un champ assurance emprunteur optionnel.
+Toutes les calculettes de prêt intègrent une assurance emprunteur optionnelle, calculée sur le capital initial (contrat de la banque) ou sur le capital restant dû (délégation).
+
+La saisie de chaque onglet est conservée sur l'appareil (`localStorage`) ; l'Historique, lui, est stocké côté serveur.
 
 L'app est installable comme **PWA** sur mobile (Android / iOS) : icône sur l'écran d'accueil, ouverture plein écran, splash screen.
 
