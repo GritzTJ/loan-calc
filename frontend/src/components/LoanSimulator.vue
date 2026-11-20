@@ -14,7 +14,7 @@
     </template>
 
     <template #form>
-      <FormField v-slot="{ id }" label="Montant emprunté">
+      <FormField v-slot="{ id }" :label="extraLoans.length ? 'Montant du prêt principal' : 'Montant emprunté'">
         <NumberInput :id="id" v-model="principal" suffix="€" placeholder="200 000" />
       </FormField>
 
@@ -55,6 +55,8 @@
         </FormField>
       </CollapsibleSection>
 
+      <ExtraLoans v-model:loans="extraLoans" v-model:smoothing="smoothing" />
+
       <EarlyRepayment
         v-model:amount="earlyAmount"
         v-model:after-months="earlyAfterMonths"
@@ -71,12 +73,12 @@
         {{ isDecreasing ? 'Première mensualité, assurance comprise' : monthlyLabel }}
         <InfoTooltip
           principe="Amortissement à taux fixe sur la durée"
-          :calcul="`${formatEuros(principal)} à ${formatPercent(annualRate)} sur ${months} mois`"
+          :calcul="`${formatEuros(principal)} à ${formatPercent(annualRate)} sur ${months} mois${plan.loans.length > 1 ? ', plus les prêts complémentaires' : ''}`"
         />
       </p>
       <p class="figure text-hero text-ink mt-1.5">{{ formatCurrency(monthlyTotal) }}</p>
       <p v-if="monthlyInsurance > 0" class="mt-2 text-sm text-ink-2">
-        dont <span class="figure text-ink">{{ formatCurrency(monthlyPayment) }}</span> de crédit
+        dont <span class="figure text-ink">{{ formatCurrency(firstCreditPayment) }}</span> de crédit
         et <span class="figure text-ink">{{ formatCurrency(monthlyInsurance) }}</span> d'assurance
       </p>
       <!-- Assurance sur le capital restant dû : la mensualité affichée est la première, la plus élevée -->
@@ -85,7 +87,21 @@
         l'assurance suit le capital restant dû.
       </p>
       <p class="mt-1 text-sm text-ink-3">
-        Pendant {{ formatDuration(amortizationTable.length) }}, à partir du {{ firstPaymentLabel }}
+        Pendant {{ formatDuration(steps.length > 1 ? steps[0].months : amortizationTable.length) }}, à partir du {{ firstPaymentLabel }}
+      </p>
+      <!-- Plusieurs prêts sans lissage : la mensualité baisse quand un prêt se termine -->
+      <ul v-if="steps.length > 1" class="mt-1 text-sm text-ink-2">
+        <li v-for="step in steps.slice(1)" :key="step.fromNumber">
+          puis <span class="figure text-ink">{{ formatCurrency(step.amount) }}</span>
+          pendant {{ formatDuration(step.months) }}, à partir du {{ formatDate(step.date) }}
+        </li>
+      </ul>
+      <p v-if="plan.smoothed" class="mt-1 text-sm text-ink-2">Mensualités lissées sur l'ensemble des prêts.</p>
+      <p v-if="smoothing && extraLoans.length && !plan.smoothed && plan.loans.length > 1" class="notice notice-warn mt-3">
+        Lissage impossible : un prêt complémentaire dure plus longtemps que le prêt principal.
+      </p>
+      <p v-if="plan.smoothed && hasEvents" class="notice notice-info mt-3">
+        Le remboursement anticipé et le changement de mensualité ne sont pas appliqués quand les mensualités sont lissées.
       </p>
       <div class="mt-4">
         <SaveSimulation placeholder="Ex : Appart Lyon - 20 ans" :save="save" :update="update" :current="current" />
@@ -125,6 +141,26 @@
           </li>
         </ul>
       </div>
+
+      <!-- Un prêt par ligne : ce que chacun pèse dans l'ensemble -->
+      <table v-if="plan.loans.length > 1" class="w-full mt-5 text-sm">
+        <thead>
+          <tr class="text-xs text-ink-2 border-b border-line">
+            <th scope="col" class="py-1.5 text-left font-medium">Prêt</th>
+            <th scope="col" class="py-1.5 text-right font-medium">Capital</th>
+            <th scope="col" class="py-1.5 text-right font-medium">Durée</th>
+            <th scope="col" class="py-1.5 text-right font-medium">Intérêts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(loan, index) in loanSummaries" :key="index" class="border-b border-line/60 last:border-b-0">
+            <th scope="row" class="py-2 pr-2 text-left font-normal text-ink">{{ loan.label }}</th>
+            <td class="py-2 text-right figure text-ink">{{ formatEuros(loan.principal) }}</td>
+            <td class="py-2 pl-2 text-right text-ink-2 whitespace-nowrap">{{ loan.duration }}</td>
+            <td class="py-2 pl-2 text-right figure text-ink">{{ formatEuros(loan.interest) }}</td>
+          </tr>
+        </tbody>
+      </table>
 
       <FundingBar class="mt-6" title="Total des mensualités" :total="totalPayments" :segments="costSegments">
         <template #after>
@@ -179,7 +215,7 @@
     </template>
 
     <template #below>
-      <AmortizationTable v-if="isValid" :rows="amortizationTable" />
+      <AmortizationTable v-if="isValid" :rows="amortizationTable" :loans="plan.loans" />
     </template>
   </CalculatorLayout>
 </template>
@@ -200,6 +236,7 @@ import {
   MAX_RATE
 } from '../services/loanCalculator.js'
 import { USURY, usuryRateFor, isUsuryOutdated } from '../services/usury.js'
+import { buildLoanPlan, paymentSteps, extraLoanName, MAX_EXTRA_LOANS } from '../services/multiLoan.js'
 import { usePersistedState } from '../composables/usePersistedState.js'
 import { useSavedSimulation } from '../composables/useSavedSimulation.js'
 import AmortizationTable from './AmortizationTable.vue'
@@ -207,6 +244,7 @@ import CalculatorLayout from './CalculatorLayout.vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import DurationField from './DurationField.vue'
 import EarlyRepayment from './EarlyRepayment.vue'
+import ExtraLoans from './ExtraLoans.vue'
 import FormField from './FormField.vue'
 import FundingBar from './FundingBar.vue'
 import InsuranceField from './InsuranceField.vue'
@@ -241,12 +279,16 @@ const { state, reset } = usePersistedState('simulator', {
   earlyPenalty: true,
   // Changement de mensualité (inactif sans montant) : appliqué au bout de modulationAfterMonths mois
   modulationPayment: null,
-  modulationAfterMonths: 24
+  modulationAfterMonths: 24,
+  // Prêts complémentaires : [{ type, principal, annualRate, months }], et lissage du total mensuel
+  extraLoans: [],
+  smoothing: false
 })
 const {
   principal, annualRate, months, insuranceRate, insuranceMode, insuranceQuota,
   applicationFees, guaranteeFees, usuryOverride,
-  earlyAmount, earlyAfterMonths, earlyEffect, earlyPenalty, modulationPayment, modulationAfterMonths
+  earlyAmount, earlyAfterMonths, earlyEffect, earlyPenalty, modulationPayment, modulationAfterMonths,
+  extraLoans, smoothing
 } = toRefs(state)
 
 // Champs du remboursement anticipé et de la modulation, enregistrés et rechargés tels quels
@@ -272,7 +314,9 @@ const { current, save, update } = useSavedSimulation('loan', () => ({
   insuranceQuota: insuranceQuota.value,
   applicationFees: applicationFees.value,
   guaranteeFees: guaranteeFees.value,
-  ...Object.fromEntries(EVENT_FIELDS.map(key => [key, state[key]]))
+  ...Object.fromEntries(EVENT_FIELDS.map(key => [key, state[key]])),
+  extraLoans: extraLoans.value,
+  smoothing: smoothing.value
 }))
 
 watch(() => props.loadParams, (p) => {
@@ -293,6 +337,16 @@ watch(() => props.loadParams, (p) => {
   guaranteeFees.value = loaded('guaranteeFees', guaranteeFees.value)
   // Absents avant la v2.6.6 : une simulation plus ancienne n'a ni remboursement anticipé ni modulation
   for (const key of EVENT_FIELDS) state[key] = loaded(key, state[key], EVENT_DEFAULTS[key])
+  // Prêts complémentaires (absents avant la v2.7.0) : chaque champ est revalidé, la base pouvant contenir autre chose
+  extraLoans.value = (Array.isArray(loaded('extraLoans', extraLoans.value, [])) ? loaded('extraLoans', extraLoans.value, []) : [])
+    .slice(0, MAX_EXTRA_LOANS)
+    .map(loan => ({
+      type: typeof loan?.type === 'string' ? loan.type : 'other',
+      principal: typeof loan?.principal === 'number' ? loan.principal : null,
+      annualRate: typeof loan?.annualRate === 'number' ? loan.annualRate : null,
+      months: sanitizeMonths(loan?.months)
+    }))
+  smoothing.value = Boolean(loaded('smoothing', smoothing.value, false))
   if (p.startDate) state.startDate = p.startDate
   // « Simuler ce prêt » crée une nouvelle saisie : elle n'est plus liée à une simulation enregistrée
   current.value = p.source ?? null
@@ -341,32 +395,54 @@ const insurance = computed(() => ({
   insuranceQuota: insuranceQuota.value
 }))
 
-// Le tableau est la source de tous les totaux : il porte l'assurance de chaque échéance,
-// qu'elle soit fixe (capital initial) ou dégressive (capital restant dû), et les événements du prêt.
-const amortizationTable = computed(() =>
-  generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value, insurance.value, events.value)
-)
+// Tous les prêts : le principal (avec ses événements) et les prêts complémentaires, lissés ou non
+const buildPlan = (planEvents) => buildLoanPlan({
+  main: { principal: principal.value, annualRate: annualRate.value, months: months.value },
+  extraLoans: extraLoans.value.map(loan => ({ ...loan, label: extraLoanName(loan) })),
+  smoothing: smoothing.value,
+  startDate: startDate.value,
+  insurance: insurance.value,
+  events: planEvents
+})
+const plan = computed(() => buildPlan(events.value))
 
-// Le même prêt sans événement : sert de référence pour chiffrer leur effet
-const baselineTable = computed(() =>
-  hasEvents.value
-    ? generateAmortizationTable(principal.value, annualRate.value, months.value, startDate.value, insurance.value)
-    : amortizationTable.value
-)
+// Le tableau de l'ensemble des prêts est la source de tous les totaux : il porte l'assurance de chaque
+// échéance, qu'elle soit fixe (capital initial) ou dégressive (capital restant dû), et les événements du prêt.
+const amortizationTable = computed(() => plan.value.combined)
+
+// Les mêmes prêts sans événement : sert de référence pour chiffrer leur effet
+const baselineTable = computed(() => (hasEvents.value ? buildPlan({}).combined : amortizationTable.value))
+
+// Capital total emprunté, tous prêts confondus
+const totalPrincipal = computed(() => plan.value.loans.reduce((sum, loan) => sum + loan.principal, 0))
+
+// Paliers de la mensualité totale (assurance comprise) : plusieurs quand un prêt se termine avant les autres
+const steps = computed(() => (plan.value.loans.length > 1 ? paymentSteps(amortizationTable.value, 'totalPayment') : []))
+
+const loanSummaries = computed(() => plan.value.loans.map(loan => ({
+  label: loan.label,
+  principal: loan.principal,
+  duration: formatDuration(loan.table.length),
+  interest: Math.round(loan.table.reduce((sum, row) => sum + row.interestPart, 0) * 100) / 100
+})))
 
 const sumOf = (key) => Math.round(amortizationTable.value.reduce((sum, row) => sum + row[key], 0) * 100) / 100
 
 // Première échéance : assurance et total du mois (les plus élevés en mode « restant dû »)
 const monthlyInsurance = computed(() => amortizationTable.value[0]?.insurancePart ?? 0)
 const monthlyTotal = computed(() => amortizationTable.value[0]?.totalPayment ?? 0)
+const firstCreditPayment = computed(() => amortizationTable.value[0]?.payment ?? 0)
 
 // Dernière échéance pleine (la toute dernière absorbe les arrondis) : sert à dire jusqu'où la mensualité baisse
 const lastMonthlyTotal = computed(() => {
   const rows = amortizationTable.value
-  return rows.length > 1 ? Math.round((monthlyPayment.value + rows.at(-1).insurancePart) * 100) / 100 : monthlyTotal.value
+  return rows.length > 1 ? rows.at(-2).totalPayment : monthlyTotal.value
 })
 
-const isDecreasing = computed(() => insuranceMode.value === 'crd' && monthlyInsurance.value > 0)
+// Mensualité qui baisse de mois en mois du seul fait de l'assurance (un seul prêt, sans événement)
+const isDecreasing = computed(() =>
+  insuranceMode.value === 'crd' && monthlyInsurance.value > 0 && plan.value.loans.length === 1 && !hasEvents.value
+)
 
 const monthlyLabel = computed(() =>
   monthlyInsurance.value > 0 ? 'Mensualité, assurance comprise' : 'Mensualité'
@@ -376,7 +452,7 @@ const totalInterest = computed(() => sumOf('interestPart'))
 const totalInsurance = computed(() => sumOf('insurancePart'))
 
 const totalPayments = computed(() =>
-  Math.round((principal.value + totalInterest.value + totalInsurance.value) * 100) / 100
+  Math.round((totalPrincipal.value + totalInterest.value + totalInsurance.value) * 100) / 100
 )
 
 // Frais payés au départ, hors mensualités
@@ -391,7 +467,7 @@ const creditCost = computed(() =>
 // Tout ce qui est versé chaque mois compte dans le TAEG, remboursement anticipé et indemnités compris
 const taeg = computed(() =>
   calculateTAEG(
-    principal.value,
+    totalPrincipal.value,
     upfrontFees.value,
     amortizationTable.value.map(row => row.totalPayment + row.extraPayment + row.penalty)
   )
@@ -436,7 +512,7 @@ const formatRate = (value) => String(value).replace('.', ',')
 const feesSummary = computed(() => (upfrontFees.value > 0 ? formatEuros(upfrontFees.value) : ''))
 
 const costSegments = computed(() => [
-  { key: 'capital', label: 'Capital emprunté', value: principal.value || 0, color: 'capital' },
+  { key: 'capital', label: 'Capital emprunté', value: totalPrincipal.value || 0, color: 'capital' },
   { key: 'interest', label: 'Intérêts', value: totalInterest.value, color: 'interest', always: true },
   { key: 'insurance', label: 'Assurance', value: totalInsurance.value, color: 'insurance' }
 ])

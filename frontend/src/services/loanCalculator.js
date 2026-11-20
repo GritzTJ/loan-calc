@@ -80,13 +80,16 @@ export function calculateEarlyRepaymentPenalty(repaid, remainingBefore, annualRa
  *     effect 'payment' : la fin ne change pas, la mensualité est recalculée sur le capital restant.
  *   modulation { payment, fromMonth } — nouvelle mensualité de crédit à partir de l'échéance n° fromMonth ;
  *     la durée s'ajuste (dans la limite de MAX_LOAN_MONTHS).
+ *   paymentOf (number) => mensualité de crédit voulue à l'échéance n° number — échéancier imposé, utilisé
+ *     par le lissage de plusieurs prêts (services/multiLoan.js). Elle couvre au moins les intérêts du mois ;
+ *     la dernière échéance solde le prêt.
  *
  * @param {number} principal - Montant emprunté (€)
  * @param {number} annualRate - Taux annuel (%)
  * @param {number} months - Nombre de mensualités
  * @param {Date} startDate - Date de début du prêt
  * @param {{ insuranceRate?: number, insuranceMode?: 'initial'|'crd', insuranceQuota?: number }} [insurance] - Assurance emprunteur
- * @param {{ earlyRepayment?: Object, modulation?: Object }} [events]
+ * @param {{ earlyRepayment?: Object, modulation?: Object, paymentOf?: Function }} [events]
  * @returns {Array<Object>} Lignes { number, date, remainingPrincipal, principalPart, interestPart,
  *   payment (crédit seul), insurancePart, totalPayment (crédit + assurance),
  *   extraPayment (remboursement anticipé versé ce mois), penalty (indemnités) }
@@ -122,6 +125,9 @@ export function generateAmortizationTable(principal, annualRate, months, startDa
     const interestPart = Math.round(remainingPrincipal * monthlyRate * 100) / 100
     const insuranceBase = insuranceOnRemaining ? remainingPrincipal : insuredCapital
     const insurancePart = Math.round(insuranceBase * insuranceMonthlyRate * 100) / 100
+
+    // Échéancier imposé (lissage) : la mensualité du mois, sans jamais descendre sous les intérêts
+    if (events.paymentOf) monthlyPayment = Math.max(interestPart, Math.round(events.paymentOf(number) * 100) / 100)
 
     // Part de capital de la mensualité constante (jamais négative, même si l'arrondi la rend inférieure aux intérêts)
     const regularPrincipalPart = Math.max(0, Math.round((monthlyPayment - interestPart) * 100) / 100)

@@ -13,6 +13,15 @@
       Export impossible : le module Excel n'a pas pu être chargé. Vérifiez la connexion et réessayez.
     </p>
 
+    <!-- Plusieurs prêts : l'ensemble par défaut, ou le détail d'un seul -->
+    <SegmentedControl
+      v-if="loans.length > 1"
+      v-model="shown"
+      class="mb-4"
+      aria-label="Prêt affiché"
+      :options="loanOptions"
+    />
+
     <AmortizationChart :years="years" />
 
     <div class="flex items-center justify-between gap-3 mb-2">
@@ -97,14 +106,27 @@
 import { computed, ref } from 'vue'
 import { formatCurrency, formatDate, formatEuros, summarizeByYear } from '../services/loanCalculator.js'
 import AmortizationChart from './AmortizationChart.vue'
+import SegmentedControl from './SegmentedControl.vue'
 
 const props = defineProps({
-  rows: { type: Array, default: () => [] }
+  // Tableau de l'ensemble des prêts
+  rows: { type: Array, default: () => [] },
+  // Détail par prêt ([{ label, table }]) ; au-delà d'un prêt, on peut en afficher un seul
+  loans: { type: Array, default: () => [] }
 })
 
+// 'all' = l'ensemble, sinon l'index du prêt affiché
+const shown = ref('all')
+const loanOptions = computed(() => [
+  { value: 'all', label: 'Ensemble' },
+  ...props.loans.map((loan, index) => ({ value: String(index), label: loan.label }))
+])
+// Un prêt retiré entre-temps : retour à l'ensemble
+const shownRows = computed(() => props.loans[shown.value]?.table ?? props.rows)
+
 // Une ligne par année de prêt : 25 ans tiennent sur un écran, là où 300 mensualités demandaient 11 000 px
-const years = computed(() => summarizeByYear(props.rows))
-const hasInsurance = computed(() => props.rows.some(row => row.insurancePart > 0))
+const years = computed(() => summarizeByYear(shownRows.value))
+const hasInsurance = computed(() => shownRows.value.some(row => row.insurancePart > 0))
 
 // Années dépliées. Un prêt d'un an ou moins n'a qu'une ligne : on montre directement ses mensualités.
 const openYears = ref(new Set())
@@ -130,7 +152,11 @@ async function onExport() {
   exportError.value = false
   try {
     const { exportAmortizationToXlsx } = await import('../services/excelExport.js')
-    exportAmortizationToXlsx(props.rows)
+    // Une feuille pour l'ensemble, puis une par prêt quand il y en a plusieurs
+    const sheets = props.loans.length > 1
+      ? [{ name: 'Ensemble', rows: props.rows }, ...props.loans.map(loan => ({ name: loan.label, rows: loan.table }))]
+      : [{ name: 'Amortissement', rows: props.rows }]
+    exportAmortizationToXlsx(sheets)
   } catch {
     exportError.value = true
   } finally {

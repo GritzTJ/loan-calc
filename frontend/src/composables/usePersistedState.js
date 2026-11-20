@@ -45,6 +45,7 @@ export function usePersistedState(key, defaults) {
 function isCompatible(value, fallback) {
   if (value === null) return true
   if (fallback === null) return typeof value === 'number' || typeof value === 'string'
-  if (Array.isArray(fallback)) return Array.isArray(value) && value.length === fallback.length
+  // Une liste (scénarios, prêts complémentaires) peut changer de longueur d'une visite à l'autre
+  if (Array.isArray(fallback)) return Array.isArray(value)
   return typeof value === typeof fallback
 }

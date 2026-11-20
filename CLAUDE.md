@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.6.6**
+Simulateur de prêt immobilier — usage personnel — **v2.7.0**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -180,6 +180,7 @@ frontend/
 - Honoraires d'agence supposés à la charge de l'acquéreur ; à la charge du vendeur, on saisit le prix affiché sans frais d'agence (dit dans l'aide du champ)
 - **TAEG** (`calculateTAEG`) : méthode actuarielle sur les échéances du tableau, frais de dossier et de garantie déduits du capital reçu. **Seuils d'usure** dans `services/usury.js`, **à mettre à jour chaque trimestre** (l'app signale une valeur périmée)
 - **Événements du prêt** (6e paramètre de `generateAmortizationTable`) : un remboursement anticipé (`effect` `duration` ou `payment`, indemnités au plafond légal = 6 mois d'intérêts sur le capital remboursé, 3 % du restant dû au plus) et une modulation de mensualité (la durée s'ajuste, bornée à `MAX_LOAN_MONTHS`). L'effet affiché compare au même prêt sans événement
+- **Prêts multiples** (`services/multiLoan.js`) : un prêt principal + jusqu'à 3 prêts complémentaires ; `buildLoanPlan` renvoie un tableau par prêt et le tableau `combined` (somme mois par mois), source des totaux du Simulateur. **Lissage** : total mensuel de crédit constant résolu par dichotomie, le prêt principal payant ce total moins les autres mensualités (jamais moins que ses intérêts) ; appliqué seulement si les prêts complémentaires finissent au plus tard avec le principal, et il désactive remboursement anticipé et modulation. L'assurance s'applique à chaque prêt
 - **Quotité d'assurance** : multiplie le taux (`effectiveInsuranceRate`), 100 % par défaut
 - Taux plafonnés à 30 % (`MAX_RATE`)
 - **Types de simulation** : `loan`, `capacity`, `project` (`SIMULATION_TYPES` dans `backend/db.js`). En ajouter un déclenche la reconstruction de la table au démarrage (SQLite ne modifie pas un `CHECK`)
@@ -187,7 +188,7 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.6.6)
+- `main` — version stable (v2.7.0)
 
 ## PWA
 
