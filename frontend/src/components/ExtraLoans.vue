@@ -30,6 +30,20 @@
       </FormField>
 
       <DurationField :model-value="loan.months" @update:model-value="update(index, { months: $event })" />
+
+      <!-- Vide : le prêt est assuré au taux du prêt principal, rappelé en grisé. 0 : pas d'assurance. -->
+      <FormField v-slot="{ id }" label="Assurance">
+        <NumberInput
+          :id="id"
+          :model-value="loan.insuranceRate ?? null"
+          :decimals="3"
+          :max="MAX_RATE"
+          suffix="% / an"
+          :placeholder="mainRateText"
+          @update:model-value="update(index, { insuranceRate: $event })"
+        />
+        <p class="text-xs text-ink-3 mt-1">Vide : comme le prêt principal. 0 : pas d'assurance.</p>
+      </FormField>
     </fieldset>
 
     <div class="sm:col-span-2 lg:col-span-1">
@@ -60,9 +74,15 @@ import FormField from './FormField.vue'
 import NumberInput from './NumberInput.vue'
 import SegmentedControl from './SegmentedControl.vue'
 
-// Prêts qui complètent le prêt principal (PTZ, prêt employeur…) : [{ type, principal, annualRate, months }]
+// Prêts qui complètent le prêt principal (PTZ, prêt employeur…) : [{ type, principal, annualRate, months, insuranceRate }]
 const loans = defineModel('loans', { type: Array, default: () => [] })
 const smoothing = defineModel('smoothing', { type: Boolean, default: false })
+
+const props = defineProps({
+  // Taux d'assurance du prêt principal : celui d'un prêt complémentaire dont le champ est laissé vide
+  mainInsuranceRate: { type: Number, default: null }
+})
+const mainRateText = computed(() => String(props.mainInsuranceRate || 0).replace('.', ','))
 
 const summary = computed(() => {
   const total = loans.value.reduce((sum, loan) => sum + (loan.principal || 0), 0)
@@ -82,7 +102,7 @@ function setType(index, type) {
 }
 
 function add() {
-  loans.value = [...loans.value, { type: 'ptz', principal: null, annualRate: 0, months: 180 }]
+  loans.value = [...loans.value, { type: 'ptz', principal: null, annualRate: 0, months: 180, insuranceRate: null }]
 }
 
 function remove(index) {

@@ -55,7 +55,7 @@
         </FormField>
       </CollapsibleSection>
 
-      <ExtraLoans v-model:loans="extraLoans" v-model:smoothing="smoothing" />
+      <ExtraLoans v-model:loans="extraLoans" v-model:smoothing="smoothing" :main-insurance-rate="insuranceRate" />
 
       <EarlyRepayment
         v-model:amount="earlyAmount"
@@ -151,6 +151,7 @@
             <th scope="col" class="py-1.5 text-right font-medium">Capital</th>
             <th scope="col" class="py-1.5 text-right font-medium">Durée</th>
             <th scope="col" class="py-1.5 text-right font-medium">Intérêts</th>
+            <th v-if="totalInsurance > 0" scope="col" class="py-1.5 pl-2 text-right font-medium">Assurance</th>
           </tr>
         </thead>
         <tbody>
@@ -159,6 +160,7 @@
             <td class="py-2 text-right figure text-ink">{{ formatEuros(loan.principal) }}</td>
             <td class="py-2 pl-2 text-right text-ink-2 whitespace-nowrap">{{ loan.duration }}</td>
             <td class="py-2 pl-2 text-right figure text-ink">{{ formatEuros(loan.interest) }}</td>
+            <td v-if="totalInsurance > 0" class="py-2 pl-2 text-right figure text-ink">{{ formatEuros(loan.insurance) }}</td>
           </tr>
         </tbody>
       </table>
@@ -427,7 +429,8 @@ const loanSummaries = computed(() => plan.value.loans.map(loan => ({
   label: loan.label,
   principal: loan.principal,
   duration: formatDuration(loan.table.length),
-  interest: Math.round(loan.table.reduce((sum, row) => sum + row.interestPart, 0) * 100) / 100
+  interest: Math.round(loan.table.reduce((sum, row) => sum + row.interestPart, 0) * 100) / 100,
+  insurance: Math.round(loan.table.reduce((sum, row) => sum + row.insurancePart, 0) * 100) / 100
 })))
 
 const sumOf = (key) => Math.round(amortizationTable.value.reduce((sum, row) => sum + row[key], 0) * 100) / 100
@@ -530,7 +533,9 @@ function buildPdf() {
   const usableLoans = extraLoans.value.filter(isUsableLoan)
   for (const [index, loan] of plan.value.loans.slice(1).entries()) {
     const source = usableLoans[index]
-    loanRows.push([loan.label, `${formatEuros(loan.principal)} à ${formatPercent(source?.annualRate ?? 0)} sur ${formatDuration(loan.table.length)}`])
+    // Le taux d'assurance n'est rappelé que s'il diffère de celui du prêt principal
+    const ownInsurance = typeof source?.insuranceRate === 'number' ? `, assurance ${formatPercent(source.insuranceRate)}` : ''
+    loanRows.push([loan.label, `${formatEuros(loan.principal)} à ${formatPercent(source?.annualRate ?? 0)} sur ${formatDuration(loan.table.length)}${ownInsurance}`])
   }
   if (plan.value.smoothed) loanRows.push(['Mensualités', 'lissées sur l\'ensemble des prêts'])
   if (!plan.value.smoothed && events.value.earlyRepayment) {

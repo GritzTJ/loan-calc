@@ -96,7 +96,7 @@ Tu attends ma validation explicite avant de commencer à coder. Si j'ai des corr
 
 ## Description
 
-Simulateur de prêt immobilier — usage personnel — **v2.7.2**
+Simulateur de prêt immobilier — usage personnel — **v2.7.3**
 
 Application installable comme **PWA** sur mobile (icône écran d'accueil, plein écran, splash screen).
 
@@ -143,7 +143,7 @@ frontend/
       FormField.vue                — libellé relié à son champ (`for`/`id` via `useId`)
       NumberInput.vue              — saisie numérique formatée, bornée (`min`/`max`), unité dans le champ (`suffix`)
       DurationField.vue            — durée saisie en années ou en mois (le modèle reste en mois)
-      InsuranceField.vue           — taux d'assurance + base de calcul (capital initial / restant dû) + quotité
+      InsuranceField.vue           — taux d'assurance (3 décimales) + base de calcul (capital initial / restant dû) + quotité
       NotaryRateField.vue          — type de bien + droits de mutation
       CollapsibleSection.vue       — section de formulaire repliable (`<details>`), pour les réglages secondaires
       EarlyRepayment.vue, ExtraLoans.vue — sections du Simulateur (remboursement anticipé, modulation, prêts complémentaires)
@@ -190,7 +190,7 @@ frontend/
 - Honoraires d'agence supposés à la charge de l'acquéreur ; à la charge du vendeur, on saisit le prix affiché sans frais d'agence (dit dans l'aide du champ)
 - **TAEG** (`calculateTAEG`) : méthode actuarielle sur les échéances du tableau, frais de dossier et de garantie déduits du capital reçu. **Seuils d'usure** dans `services/usury.js`, **à mettre à jour chaque trimestre** (l'app signale une valeur périmée)
 - **Événements du prêt** (6e paramètre de `generateAmortizationTable`) : un remboursement anticipé (`effect` `duration` ou `payment`, indemnités au plafond légal = 6 mois d'intérêts sur le capital remboursé, 3 % du restant dû au plus) et une modulation de mensualité (la durée s'ajuste, bornée à `MAX_LOAN_MONTHS`). L'effet affiché compare au même prêt sans événement
-- **Prêts multiples** (`services/multiLoan.js`) : un prêt principal + jusqu'à 3 prêts complémentaires ; `buildLoanPlan` renvoie un tableau par prêt et le tableau `combined` (somme mois par mois), source des totaux du Simulateur. **Lissage** : total mensuel de crédit constant résolu par dichotomie, le prêt principal payant ce total moins les autres mensualités (jamais moins que ses intérêts) ; appliqué seulement si les prêts complémentaires finissent au plus tard avec le principal, et il désactive remboursement anticipé et modulation. L'assurance s'applique à chaque prêt
+- **Prêts multiples** (`services/multiLoan.js`) : un prêt principal + jusqu'à 3 prêts complémentaires ; `buildLoanPlan` renvoie un tableau par prêt et le tableau `combined` (somme mois par mois), source des totaux du Simulateur. **Lissage** : total mensuel de crédit constant résolu par dichotomie, le prêt principal payant ce total moins les autres mensualités (jamais moins que ses intérêts) ; appliqué seulement si les prêts complémentaires finissent au plus tard avec le principal, et il désactive remboursement anticipé et modulation. L'assurance s'applique à chaque prêt : un prêt complémentaire a son propre taux (`insuranceRate`, vide = celui du prêt principal, 0 = aucune), la base de calcul et la quotité sont communes
 - **Louer ou acheter** (`compareRentAndBuy`) : même budget mensuel dans les deux cas, le moins dépensier place la différence ; patrimoine acheteur = valeur du bien − restant dû + épargne, patrimoine locataire = apport placé + économies. Non comptés : frais de revente, fiscalité de l'épargne, gros travaux
 - **Comparer** : 2 à 4 scénarios, alimentables depuis l'Historique (seul le prêt principal d'une simulation est repris)
 - **Quotité d'assurance** : multiplie le taux (`effectiveInsuranceRate`), 100 % par défaut
@@ -200,7 +200,7 @@ frontend/
 
 ## Branches Git
 
-- `main` — version stable (v2.7.2)
+- `main` — version stable (v2.7.3)
 
 ## PWA
 

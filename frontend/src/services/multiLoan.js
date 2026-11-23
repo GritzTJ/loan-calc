@@ -62,10 +62,11 @@ export function calculateSmoothedPayment(main, sidePayments) {
  *
  * @param {Object} plan
  * @param {{ principal, annualRate, months }} plan.main - Prêt principal
- * @param {Array<{ label, principal, annualRate, months }>} [plan.extraLoans] - Prêts complémentaires
+ * @param {Array<{ label, principal, annualRate, months, insuranceRate? }>} [plan.extraLoans] - Prêts complémentaires
+ *   (insuranceRate absent ou null = taux d'assurance du prêt principal)
  * @param {boolean} [plan.smoothing] - Lisser le total des mensualités sur la durée du prêt principal
  * @param {Date} plan.startDate
- * @param {Object} [plan.insurance] - Assurance, appliquée à chaque prêt
+ * @param {Object} [plan.insurance] - Assurance du prêt principal ; base et quotité valent pour tous les prêts
  * @param {Object} [plan.events] - Remboursement anticipé et modulation du prêt principal (ignorés si lissage)
  * @returns {{ loans: Array<{ label, principal, table }>, combined: Array<Object>, smoothed: boolean, smoothedPayment: number|null }}
  *   loans[0] est le prêt principal ; combined additionne les prêts mois par mois, au même format
@@ -75,7 +76,12 @@ export function buildLoanPlan({ main, extraLoans = [], smoothing = false, startD
   const sides = extraLoans.filter(isUsableLoan).slice(0, MAX_EXTRA_LOANS).map(loan => ({
     label: loan.label || extraLoanName(loan),
     principal: loan.principal,
-    table: generateAmortizationTable(loan.principal, loan.annualRate, Math.min(loan.months, MAX_LOAN_MONTHS), startDate, insurance)
+    // Taux d'assurance propre au prêt s'il est saisi (0 = pas d'assurance), sinon celui du prêt principal.
+    // La base de calcul et la quotité sont communes à tous les prêts.
+    table: generateAmortizationTable(loan.principal, loan.annualRate, Math.min(loan.months, MAX_LOAN_MONTHS), startDate, {
+      ...insurance,
+      insuranceRate: loan.insuranceRate ?? insurance.insuranceRate
+    })
   }))
 
   // Le lissage n'a de sens que si les autres prêts se terminent au plus tard avec le prêt principal

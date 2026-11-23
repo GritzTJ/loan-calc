@@ -13,7 +13,7 @@
       <NumberInput
         :id="id"
         :model-value="rate"
-        :decimals="2"
+        :decimals="3"
         :max="MAX_RATE"
         :suffix="compact ? '%' : '% / an'"
         placeholder="0,30"

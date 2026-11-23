@@ -92,4 +92,36 @@ describe('lissage', () => {
     const insured = buildLoanPlan({ main, extraLoans: [ptz], startDate: start, insurance: { insuranceRate: 0.3 } })
     expect(insured.combined[0].insurancePart).toBe(60) // 240 000 € × 0,30 % / 12
   })
+
+  it('applique à un prêt complémentaire son propre taux d\'assurance', () => {
+    // Deux prêts d'une même offre : 160 031,65 € à 0,097 % et 22 500 € à 0,106 %
+    const plan = buildLoanPlan({
+      main: { principal: 160031.65, annualRate: 3, months: 300 },
+      extraLoans: [{ principal: 22500, annualRate: 0, months: 300, insuranceRate: 0.106 }],
+      startDate: start,
+      insurance: { insuranceRate: 0.097 }
+    })
+    expect(plan.loans[0].table[0].insurancePart).toBe(12.94)
+    expect(plan.loans[1].table[0].insurancePart).toBe(1.99)
+    expect(plan.combined[0].insurancePart).toBe(14.93)
+  })
+
+  it('un taux d\'assurance à 0 retire l\'assurance du prêt complémentaire, un taux vide reprend celui du principal', () => {
+    const insurance = { insuranceRate: 0.3 }
+    const none = buildLoanPlan({ main, extraLoans: [{ ...ptz, insuranceRate: 0 }], startDate: start, insurance })
+    expect(none.loans[1].table.every(row => row.insurancePart === 0)).toBe(true)
+    expect(none.combined[0].insurancePart).toBe(45) // 180 000 € × 0,30 % / 12
+    const inherited = buildLoanPlan({ main, extraLoans: [{ ...ptz, insuranceRate: null }], startDate: start, insurance })
+    expect(inherited.combined[0].insurancePart).toBe(60)
+  })
+
+  it('garde la base de calcul et la quotité du prêt principal', () => {
+    const plan = buildLoanPlan({
+      main, extraLoans: [{ ...ptz, insuranceRate: 0.12 }], startDate: start,
+      insurance: { insuranceRate: 0.3, insuranceMode: 'crd', insuranceQuota: 200 }
+    })
+    const [first, second] = plan.loans[1].table
+    expect(first.insurancePart).toBe(12) // 60 000 € × 0,12 % × 200 % / 12
+    expect(second.insurancePart).toBeLessThan(first.insurancePart) // dégressive
+  })
 })

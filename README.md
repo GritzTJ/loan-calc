@@ -2,7 +2,7 @@
 
 Application web de simulation de prêt immobilier avec cinq modules :
 
-1. **Simulateur de prêt** — Mensualité, coût, TAEG comparé au seuil d'usure, prêts complémentaires (PTZ…) avec lissage, remboursement anticipé et modulation, tableau d'amortissement par année, exports Excel et PDF
+1. **Simulateur de prêt** — Mensualité, coût, TAEG comparé au seuil d'usure, prêts complémentaires (PTZ…) avec leur propre taux d'assurance et lissage, remboursement anticipé et modulation, tableau d'amortissement par année, exports Excel et PDF
 2. **Capacité d'emprunt** — Capital empruntable selon le taux d'endettement, prix du bien accessible (frais de notaire au barème, travaux)
 3. **Projet** — Montant à emprunter pour un bien donné, plan de financement besoins / ressources, export PDF
 4. **Comparer** — 2 à 4 prêts côte à côte (chargeables depuis l'historique), et un mode « Louer ou acheter »
